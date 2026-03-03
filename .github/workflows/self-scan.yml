@@ -1,0 +1,27 @@
+name: VXPwngard Self-Scan
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - 'CLAUDE.md'
+      - '.claude/**'
+permissions:
+  contents: read
+  security-events: write
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Build vxpwngard
+        run: go build -o vxpwngard ./cmd/vxpwngard/
+      - name: Run VXPwngard
+        run: ./vxpwngard scan . --format sarif --output results.sarif
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif

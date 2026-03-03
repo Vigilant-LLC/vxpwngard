@@ -1,0 +1,37 @@
+name: AI Code Review
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  ai-review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR Code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - name: Load AI Configuration
+        run: |
+          if [ -f CLAUDE.md ]; then
+            cat CLAUDE.md | claude-review --config -
+          fi
+          if [ -f .claude/settings.json ]; then
+            echo "Loading Claude settings..."
+          fi
+      - name: Check MCP Config
+        run: |
+          if [ -f .mcp.json ]; then
+            cat .mcp.json
+          fi
+          if [ -f mcp-config.json ]; then
+            cat mcp-config.json
+          fi
+      - name: Run AI Review
+        run: |
+          claude-review --pr ${{ github.event.pull_request.number }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

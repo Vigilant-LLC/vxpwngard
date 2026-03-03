@@ -1,0 +1,133 @@
+id: VXS-004
+name: "Comment-Triggered Workflow Without Author Authorization Check"
+severity: high
+description: >
+  A workflow is triggered by `issue_comment`, `pull_request_review_comment`, or
+  `workflow_run` events and accesses secrets or has write permissions, but does not
+  verify the comment author's authorization level before executing privileged
+  operations. The `issue_comment` event fires for comments from ANY GitHub user,
+  including those with no affiliation to the repository. Without an explicit check
+  on `github.event.comment.author_association` (e.g., requiring OWNER, MEMBER, or
+  COLLABORATOR), any external user can trigger the workflow by posting a comment
+  on any open issue or pull request. If the workflow accesses secrets, performs
+  deployments, or has write permissions, this effectively grants those privileges
+  to arbitrary external users. The `workflow_run` trigger is similarly dangerous
+  when it runs after a workflow that can be triggered by forks.
+
+tags:
+  - injection
+  - privilege-escalation
+
+attack_scenario: >
+  A repository has a workflow that deploys preview environments when a maintainer
+  comments `/deploy` on a pull request. The workflow triggers on `issue_comment`
+  and checks if the comment body contains `/deploy`, then uses repository secrets
+  to deploy to a cloud environment. However, the workflow does not check the
+  `author_association` of the commenter. An attacker finds any open issue or PR,
+  posts a comment containing `/deploy`, and the workflow triggers with full access
+  to deployment secrets (AWS keys, cloud tokens, etc.). The attacker can modify
+  the deployment payload by also submitting a PR with malicious code and then
+  commenting `/deploy` on their own PR. Even without direct secret exfiltration,
+  the attacker can trigger resource-intensive deployments, causing financial damage,
+  or exploit the deployment pipeline to inject malicious code into production
+  environments.
+
+real_world_incident: >
+  Multiple open-source projects have been found with comment-triggered workflows
+  that lack author association checks. GitHub Security Lab documented this pattern
+  as a common privilege escalation vector in their GitHub Actions security guidance.
+  In several incidents, researchers demonstrated that external contributors could
+  trigger deployment workflows, access cloud credentials, and execute arbitrary code
+  by simply posting specially crafted comments on public issues. The pattern is
+  especially prevalent in projects that use slash-command bots (e.g., /deploy,
+  /test, /approve) implemented as GitHub Actions workflows.
+
+fix: |
+  **Always check `author_association` before executing privileged operations in
+  comment-triggered workflows.**
+
+  **Safe pattern with author_association check:**
+
+  ```yaml
+  on:
+    issue_comment:
+      types: [created]
+
+  jobs:
+    deploy-preview:
+      # Only run for comments from maintainers/collaborators
+      if: >
+        github.event.issue.pull_request &&
+        contains(github.event.comment.body, '/deploy') &&
+        (
+          github.event.comment.author_association == 'OWNER' ||
+          github.event.comment.author_association == 'MEMBER' ||
+          github.event.comment.author_association == 'COLLABORATOR'
+        )
+      runs-on: ubuntu-latest
+      permissions:
+        contents: read
+        deployments: write
+      steps:
+        - uses: actions/checkout@v4
+        - run: ./deploy-preview.sh
+          env:
+            DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+  ```
+
+  **Additional hardening with team membership check:**
+
+  ```yaml
+  jobs:
+    deploy:
+      if: contains(github.event.comment.body, '/deploy')
+      runs-on: ubuntu-latest
+      steps:
+        - name: Check team membership
+          uses: actions/github-script@v7
+          with:
+            script: |
+              try {
+                await github.rest.teams.getMembershipForUserInOrg({
+                  org: 'my-org',
+                  team_slug: 'deployers',
+                  username: context.payload.comment.user.login
+                });
+              } catch (e) {
+                core.setFailed('User is not authorized to deploy');
+              }
+
+        - name: Deploy
+          if: success()
+          run: ./deploy.sh
+          env:
+            DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+  ```
+
+  **For `workflow_run` triggers, validate the source workflow:**
+
+  ```yaml
+  on:
+    workflow_run:
+      workflows: ["CI"]
+      types: [completed]
+
+  jobs:
+    deploy:
+      # Only deploy if the triggering workflow was from the base repo, not a fork
+      if: >
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_repository.full_name == github.repository
+      runs-on: ubuntu-latest
+      steps:
+        - run: echo "Safe to deploy - workflow was not triggered by a fork"
+  ```
+
+  **Key principles:**
+  - Always check `author_association` for comment-triggered workflows
+  - Use allowlist approach (OWNER, MEMBER, COLLABORATOR) rather than denylist
+  - For `workflow_run`, verify `head_repository.full_name == github.repository`
+  - Apply least-privilege permissions even with auth checks as defense in depth
+  - Consider using GitHub's built-in environment protection rules for deployments
+
+references: []

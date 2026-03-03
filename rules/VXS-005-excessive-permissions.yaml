@@ -1,0 +1,148 @@
+id: VXS-005
+name: "Excessive Permissions on Untrusted Trigger"
+severity: medium
+description: >
+  A job specifies `permissions:` with write-level access (`contents: write`,
+  `packages: write`, `id-token: write`, `actions: write`, `deployments: write`,
+  or similar) but the workflow is triggered by `pull_request_target`, `issue_comment`,
+  `pull_request_review_comment`, or another event that can be initiated by external
+  users. Write permissions in these contexts are dangerous because they grant the
+  workflow the ability to modify repository contents, publish packages, assume cloud
+  identities via OIDC, or modify other workflows. When combined with any code
+  execution vulnerability (expression injection, fork checkout, etc.), these
+  permissions amplify the impact from information disclosure to full repository
+  compromise. Even without an explicit vulnerability, excessive permissions violate
+  the principle of least privilege and expand the blast radius of any future security
+  issue.
+
+tags:
+  - permissions
+  - least-privilege
+
+attack_scenario: >
+  A repository has a workflow triggered by `pull_request_target` that runs linting
+  on PR code and posts results as a comment. The workflow is configured with
+  `permissions: contents: write` and `packages: write` because the developer
+  copy-pasted from another workflow that needed those permissions. An attacker
+  discovers a subtle expression injection in the linting step (e.g., the PR title
+  is interpolated into a run block). Because the job has `contents: write`, the
+  attacker can use the injected command to push malicious commits directly to the
+  main branch. Because it has `packages: write`, they can publish backdoored
+  packages to the GitHub Container Registry or npm via GitHub Packages. With
+  `id-token: write`, an attacker could request an OIDC token and use it to
+  authenticate to cloud providers (AWS, GCP, Azure) configured to trust the
+  repository's OIDC identity, potentially compromising production infrastructure.
+
+real_world_incident: >
+  In numerous supply-chain attacks against GitHub Actions, excessive permissions
+  were a critical amplification factor. The GitHub Actions ecosystem defaults to
+  broad permissions when no explicit permissions block is specified, which led
+  GitHub to introduce the option to set default token permissions to read-only at
+  the organization and repository level. The OpenSSF Scorecard project specifically
+  flags workflows with excessive permissions as a security risk. Multiple incidents
+  documented by GitHub Security Lab involved workflows where the GITHUB_TOKEN had
+  unnecessary write access, turning what would have been a limited information
+  disclosure into a full repository compromise.
+
+fix: |
+  **Apply the principle of least privilege to all workflow permissions.**
+
+  **Step 1: Set restrictive default permissions at the workflow level.**
+
+  ```yaml
+  # Set read-only defaults at the top of every workflow
+  permissions:
+    contents: read
+
+  on:
+    pull_request_target:
+      branches: [main]
+  ```
+
+  **Step 2: Grant write permissions only to specific jobs that need them,
+  and only on trusted triggers.**
+
+  ```yaml
+  permissions:
+    contents: read  # Workflow-level default
+
+  on:
+    pull_request_target:
+      branches: [main]
+
+  jobs:
+    # This job only reads code -- no extra permissions needed
+    lint:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4  # Checks out BASE, not fork
+        - run: npm run lint
+
+    # This job needs write access -- separate it and add conditions
+    comment:
+      needs: lint
+      runs-on: ubuntu-latest
+      permissions:
+        pull-requests: write  # Only the specific permission needed
+      steps:
+        - uses: actions/github-script@v7
+          with:
+            script: |
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: 'Lint passed!'
+              });
+  ```
+
+  **Step 3: For untrusted triggers, never grant these permissions:**
+
+  ```yaml
+  # DANGEROUS on pull_request_target or issue_comment:
+  permissions:
+    contents: write      # Can push commits, create/delete branches
+    packages: write      # Can publish packages
+    id-token: write      # Can request OIDC tokens for cloud auth
+    actions: write       # Can modify other workflows
+    deployments: write   # Can create deployments
+  ```
+
+  **Step 4: Enable restrictive defaults at the organization/repository level.**
+
+  Go to Repository Settings > Actions > General > Workflow permissions and select
+  "Read repository contents and packages permissions". This makes the default
+  GITHUB_TOKEN read-only, requiring workflows to explicitly request write access.
+
+  **Step 5: Use separate workflows for privileged operations.**
+
+  ```yaml
+  # Workflow 1: Unprivileged (triggered by PR)
+  name: Test
+  on: pull_request
+  permissions:
+    contents: read
+  jobs:
+    test:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
+        - run: npm test
+
+  # Workflow 2: Privileged (triggered only on push to main)
+  name: Publish
+  on:
+    push:
+      branches: [main]
+  permissions:
+    contents: read
+    packages: write
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
+        - run: npm publish
+  ```
+
+references: []

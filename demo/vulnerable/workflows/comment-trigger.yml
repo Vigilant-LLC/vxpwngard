@@ -1,0 +1,24 @@
+name: Deploy on Comment
+on:
+  issue_comment:
+    types: [created]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: contains(github.event.comment.body, '/deploy')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Get Branch
+        run: |
+          echo "Deploying branch: ${{ github.head_ref }}"
+          git checkout ${{ github.head_ref }}
+      - name: Install Dependencies
+        run: |
+          curl -sSfL https://install.example.com/setup.sh | bash
+      - name: Deploy
+        run: |
+          echo "Deploying with token..."
+          ./deploy.sh --token ${{ secrets.DEPLOY_TOKEN }}
+        env:
+          DEPLOY_ENV: production

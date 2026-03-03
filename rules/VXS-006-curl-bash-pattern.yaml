@@ -1,0 +1,109 @@
+id: VXS-006
+name: "Curl-Pipe-Bash Remote Code Execution"
+severity: high
+description: >
+  A `run:` block in a GitHub Actions workflow downloads and immediately executes a
+  remote script using patterns such as `curl ... | bash`, `curl ... | sh`,
+  `wget ... | bash`, `wget ... | sh`, `curl ... | sudo bash`, or equivalent
+  variations. This pattern fetches arbitrary code from a remote server and executes
+  it without any integrity verification, making the workflow vulnerable to multiple
+  attack vectors: compromise of the remote server, man-in-the-middle attacks (if
+  using HTTP instead of HTTPS), DNS hijacking, CDN cache poisoning, or domain
+  expiration and takeover. The remote script content can change at any time without
+  notice, and there is no audit trail of what code was actually executed during any
+  given workflow run. This violates supply-chain integrity principles and makes
+  builds non-reproducible.
+
+tags:
+  - supply-chain
+  - remote-code-execution
+
+attack_scenario: >
+  A CI workflow installs a build tool by running `curl -sSL https://install.example.com/setup.sh | bash`.
+  An attacker compromises the install.example.com server (or registers the domain after
+  it expires) and replaces setup.sh with a malicious script. The next time any workflow
+  runs, the malicious script executes with full runner privileges, accessing all
+  environment variables (including GITHUB_TOKEN and any secrets passed to the job),
+  the checked-out source code, and any cached credentials. The attacker can exfiltrate
+  secrets, inject backdoors into build artifacts, modify the checked-out code before
+  it is built and tested, or install persistent access on the runner. Because curl-pipe-bash
+  executes the script as it downloads, even a partial download of a maliciously crafted
+  script can result in execution of attacker-controlled commands. The attack is
+  particularly effective because many install scripts use HTTP redirects, CDNs, and
+  third-party hosting that expand the attack surface.
+
+real_world_incident: >
+  The curl-pipe-bash pattern has been implicated in multiple supply-chain incidents.
+  In the Codecov bash uploader incident (2021), attackers modified the bash script at
+  codecov.io/bash that was fetched and piped to bash by thousands of CI pipelines.
+  The modified script exfiltrated environment variables and secrets from CI runners
+  for two months before detection. Major organizations including Twitch, HashiCorp,
+  and Confluent were affected. This incident demonstrated that even trusted, widely
+  used install scripts can be compromised, and the curl-pipe-bash pattern provides
+  no defense against such compromises.
+
+fix: |
+  **Option 1 (Preferred): Download, verify checksum, then execute.**
+
+  ```yaml
+  - name: Install tool securely
+    run: |
+      # Download the script
+      curl -sSL -o setup.sh https://install.example.com/setup.sh
+
+      # Verify the checksum (update hash when intentionally upgrading)
+      echo "a]8f4b2c3d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2  setup.sh" | sha256sum -c -
+
+      # Execute only if checksum matches
+      bash setup.sh
+  ```
+
+  **Option 2: Use a pinned GitHub Action instead of a shell script.**
+
+  ```yaml
+  # Instead of: curl -sSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+  # Use a pinned action:
+  - uses: actions/setup-node@v4
+    with:
+      node-version: '20'
+  ```
+
+  **Option 3: Vendor the script into your repository.**
+
+  ```yaml
+  # Commit the install script to your repo and review changes via PR
+  - name: Run vendored install script
+    run: bash ./scripts/vendored/setup-tool.sh
+  ```
+
+  **Option 4: Use package managers with lockfiles.**
+
+  ```yaml
+  # Instead of curl | bash for language-specific tools:
+  - run: |
+      pip install --require-hashes -r requirements.txt
+      # or
+      npm ci  # Uses package-lock.json for integrity verification
+  ```
+
+  **Patterns to detect and replace:**
+
+  ```bash
+  # ALL of these are dangerous:
+  curl -sSL https://example.com/install.sh | bash
+  curl -fsSL https://example.com/setup | sh
+  wget -qO- https://example.com/install | bash
+  curl https://example.com/script.sh | sudo bash
+  bash <(curl -s https://example.com/install.sh)
+  eval "$(curl -sSL https://example.com/setup)"
+  ```
+
+  **Key principles:**
+  - Always download first, verify integrity, then execute
+  - Use SHA-256 checksums from a trusted source (ideally the project's signed releases)
+  - Prefer official GitHub Actions over install scripts
+  - If you must use a script, vendor it and track changes in version control
+  - Never use `sudo` with piped remote scripts
+  - Always use HTTPS (never HTTP) even as an interim measure
+
+references: []

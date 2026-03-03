@@ -1,0 +1,167 @@
+id: VXS-009
+name: "Direct Execution of Fork Code in Privileged Context"
+severity: critical
+description: >
+  A workflow uses the `pull_request_target` trigger and, after checking out fork code,
+  directly executes it using language runtimes such as `go run`, `node`, `python`,
+  `ruby`, `bash`, `perl`, `make`, `gradle`, `mvn`, `cargo run`, `dotnet run`, or
+  equivalent commands. This is distinct from VXS-001 (which covers the checkout itself)
+  because this rule specifically targets the execution of fork-authored code within the
+  privileged `pull_request_target` context. The `pull_request_target` trigger provides
+  the workflow with the base repository's GITHUB_TOKEN (with write permissions) and all
+  configured secrets. Any code executed in this context inherits these privileges. When
+  fork code is checked out and then run, the attacker's arbitrary code executes with
+  full access to repository secrets, write tokens, and potentially cloud credentials
+  via OIDC. This includes not just explicit `run` commands but also implicit code
+  execution through build systems (Makefiles, package.json scripts, setup.py,
+  build.gradle), test frameworks, linters that execute plugins, and language-specific
+  initialization hooks (Go init() functions, Python __init__.py, Ruby gems with
+  native extensions).
+
+tags:
+  - injection
+  - supply-chain
+  - code-execution
+
+attack_scenario: >
+  A popular Go project uses `pull_request_target` to run tests on PRs with access to
+  secrets needed for integration tests. The workflow checks out the PR code and runs
+  `go test ./...`. An attacker submits a PR that adds a new Go file containing an
+  `init()` function. In Go, `init()` functions execute automatically when a package
+  is loaded -- before `main()` or any test function runs. The attacker's `init()`
+  function reads environment variables (which contain GITHUB_TOKEN and secrets),
+  encodes them in base64, and sends them to an attacker-controlled server via an HTTPS
+  POST request. The attacker then uses the stolen GITHUB_TOKEN to push malicious
+  commits to the main branch, create backdoored releases, or modify GitHub Pages.
+  The same attack works with Python (malicious setup.py or __init__.py), Node.js
+  (preinstall/postinstall scripts in package.json), Ruby (gem extensions), and any
+  language with automatic initialization hooks. Even running a linter like ESLint on
+  fork code is dangerous if the fork modifies .eslintrc to load a malicious plugin.
+
+real_world_incident: >
+  The awesome-go project (the curated list of Go packages with 100k+ stars) was
+  identified as vulnerable to this exact attack pattern. The project's CI workflow
+  used `pull_request_target` and ran `go run` on checked-out PR code to validate
+  submitted URLs. Because Go's `init()` functions execute automatically when any
+  package in the module is loaded, an attacker could submit a PR adding a Go file
+  with a malicious `init()` function that would execute in the privileged CI context.
+  This was particularly dangerous because awesome-go regularly receives PRs from
+  external contributors adding new Go packages, making the attack vector a natural
+  part of the project's workflow. The vulnerability was disclosed through GitHub's
+  security advisory process and the workflow was restructured to avoid executing
+  fork code.
+
+fix: |
+  **Never execute fork code in a `pull_request_target` context. Period.**
+
+  **Option 1 (Preferred): Use `pull_request` trigger for code execution.**
+
+  ```yaml
+  # SAFE: pull_request runs in fork context with read-only permissions
+  on:
+    pull_request:
+      branches: [main]
+
+  jobs:
+    test:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
+        - uses: actions/setup-go@v5
+          with:
+            go-version: '1.22'
+        - run: go test ./...
+  ```
+
+  **Option 2: Two-workflow split for integration tests needing secrets.**
+
+  ```yaml
+  # Workflow 1: Build and test in unprivileged fork context
+  name: PR Tests
+  on: pull_request
+
+  jobs:
+    test:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
+        - run: go test ./...
+        - run: go build -o app .
+        - uses: actions/upload-artifact@v4
+          with:
+            name: test-results
+            path: test-results/
+
+  # Workflow 2: Run integration tests with secrets (never executes fork code)
+  name: Integration Tests
+  on:
+    workflow_run:
+      workflows: ["PR Tests"]
+      types: [completed]
+
+  jobs:
+    integration:
+      if: >
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_repository.full_name == github.repository
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4  # Checks out BASE repo code
+        - uses: actions/download-artifact@v4
+          with:
+            run-id: ${{ github.event.workflow_run.id }}
+        # Run integration tests using BASE repo code with test results from PR
+  ```
+
+  **Option 3: If you must validate PR content, do it without executing code.**
+
+  ```yaml
+  on:
+    pull_request_target:
+      branches: [main]
+
+  jobs:
+    validate:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4  # Checks out BASE, not fork
+        - name: Validate PR content via API (no code execution)
+          uses: actions/github-script@v7
+          with:
+            script: |
+              const files = await github.rest.pulls.listFiles({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number
+              });
+              // Validate file contents via API without checking out fork code
+              for (const file of files.data) {
+                const content = await github.rest.repos.getContent({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  path: file.filename,
+                  ref: context.payload.pull_request.head.sha
+                });
+                // Static validation only -- never eval() or execute the content
+              }
+  ```
+
+  **Dangerous patterns to detect:**
+
+  ```yaml
+  # ALL of these are dangerous after checking out fork code in pull_request_target:
+  - run: go test ./...
+  - run: go run ./cmd/validate
+  - run: node index.js
+  - run: python setup.py test
+  - run: python -m pytest
+  - run: npm test          # Executes package.json "test" script
+  - run: npm install       # Executes pre/post install hooks
+  - run: make test
+  - run: gradle build
+  - run: cargo test
+  - run: ruby test.rb
+  - run: bash ./scripts/test.sh  # Script from fork
+  ```
+
+references: []

@@ -1,0 +1,110 @@
+id: VXS-007
+name: "Unpinned Third-Party Action Using Mutable Tag"
+severity: medium
+description: >
+  A workflow step references a third-party GitHub Action (not under the `actions/`
+  or `github/` organization) using a mutable tag reference such as `@v1`, `@v2`,
+  `@main`, `@master`, `@latest`, or `@release`. Mutable tags can be force-pushed
+  to point to different commits at any time, meaning the code executed by the workflow
+  can change without any notification, review, or audit trail. If the action's
+  repository is compromised, the attacker can move the tag to a malicious commit,
+  and all workflows referencing that tag will immediately begin executing the
+  attacker's code with whatever permissions the job has. Even version tags like
+  `@v1` are mutable in git -- they are not the same as pinning to a specific version.
+  Only full 40-character commit SHA references are immutable.
+
+tags:
+  - supply-chain
+  - dependency-pinning
+
+attack_scenario: >
+  A popular GitHub Action (e.g., a code coverage uploader, deployment tool, or
+  notification action) is used by thousands of repositories with `uses: popular-org/action@v2`.
+  An attacker compromises the action maintainer's GitHub account (via credential stuffing,
+  phishing, or a leaked PAT). The attacker pushes a new commit to the action repository
+  that adds secret exfiltration logic alongside the normal functionality, then force-pushes
+  the `v2` tag to point to the malicious commit. Every repository that references
+  `popular-org/action@v2` now executes the malicious code on their next workflow run.
+  The attacker collects secrets, tokens, and credentials from thousands of CI pipelines
+  before the compromise is detected. This exact scenario played out in the tj-actions/changed-files
+  incident of March 2025, where attackers compromised a widely-used action and exfiltrated
+  secrets from repositories that had pinned to mutable version tags.
+
+real_world_incident: >
+  In March 2025, the tj-actions/changed-files action (used by over 23,000 repositories)
+  was compromised. Attackers gained access to the maintainer's account and pushed
+  malicious code that exfiltrated CI/CD secrets by writing them to workflow logs. The
+  malicious code was tagged with existing version tags, so all repositories using
+  `@v35`, `@v39`, or similar mutable tags immediately began running the compromised
+  code. Repositories that had pinned to a specific commit SHA were unaffected. This
+  incident reinforced the critical importance of SHA pinning for all third-party
+  actions. Additionally, in 2022, the actions/checkout action itself had a vulnerability
+  where credential persistence could leak tokens -- demonstrating that even first-party
+  actions benefit from version awareness.
+
+fix: |
+  **Pin all third-party actions to full commit SHAs.**
+
+  **Vulnerable pattern:**
+
+  ```yaml
+  # DANGEROUS: Mutable tag can be force-pushed to malicious commit
+  - uses: some-org/some-action@v2
+  - uses: another-org/deploy@main
+  - uses: third-org/tool@latest
+  ```
+
+  **Safe pattern:**
+
+  ```yaml
+  # SAFE: Immutable commit SHA -- cannot be changed without updating workflow
+  - uses: some-org/some-action@a]8f4b2c3d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0  # v2.1.0
+  - uses: another-org/deploy@1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b  # v3.0.0
+  ```
+
+  **How to find the commit SHA for a tag:**
+
+  ```bash
+  # Get the SHA for a specific tag
+  gh api repos/some-org/some-action/git/ref/tags/v2.1.0 --jq '.object.sha'
+
+  # Or use git ls-remote
+  git ls-remote https://github.com/some-org/some-action.git v2.1.0
+  ```
+
+  **Automate SHA pinning with these tools:**
+
+  ```bash
+  # Use pinact to automatically pin actions to SHAs
+  # https://github.com/suzuki-shunsuke/pinact
+  pinact run
+
+  # Or use StepSecurity's secure-repo tool
+  # https://github.com/step-security/secure-repo
+  ```
+
+  **Use Dependabot or Renovate to keep pinned SHAs up to date:**
+
+  ```yaml
+  # .github/dependabot.yml
+  version: 2
+  updates:
+    - package-ecosystem: "github-actions"
+      directory: "/"
+      schedule:
+        interval: "weekly"
+  ```
+
+  **Note on first-party actions:** Actions under `actions/*` and `github/*` are
+  maintained by GitHub and have additional security controls. While SHA pinning
+  is still recommended as defense-in-depth, the risk of compromise is lower for
+  these organizations. Focus SHA pinning efforts on third-party actions first.
+
+  **Key principles:**
+  - Always use full 40-character commit SHAs for third-party actions
+  - Add a comment with the version number for readability
+  - Use Dependabot or Renovate to get automated PR updates for new versions
+  - Audit third-party actions before adopting them
+  - Consider forking critical actions into your organization for additional control
+
+references: []

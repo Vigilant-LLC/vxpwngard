@@ -1,0 +1,44 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/vxpwngard
+
+# Test binary
+*.test
+
+# Coverage
+*.out
+coverage.html
+
+# Dependency directories
+vendor/
+
+# Go workspace
+go.work
+go.work.sum
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build / release artifacts
+dist/
+bin/
+*.tar.gz
+*.zip
+
+# Baseline (user-generated, not committed)
+.vxpwngard-baseline.json
+
+# Prompt files
+claudecode-prompt.md

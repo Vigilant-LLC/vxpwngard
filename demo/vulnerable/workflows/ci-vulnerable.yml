@@ -1,0 +1,32 @@
+name: CI Build
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+permissions:
+  contents: write
+  packages: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Build
+        run: go build ./...
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run Tests
+        run: go test ./...
+      - name: Report Coverage
+        uses: codecov/codecov-action@v3
+      - name: Notify
+        run: |
+          curl -X POST https://webhook.external-service.com/notify \
+            -H "Authorization: Bearer ${{ secrets.DEPLOY_TOKEN }}" \
+            -d '{"status": "success"}'

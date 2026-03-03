@@ -1,0 +1,124 @@
+id: VXS-001
+name: "pull_request_target with Fork Code Checkout"
+severity: critical
+description: >
+  A workflow uses the `pull_request_target` trigger and checks out the pull request
+  head ref (fork code) using `actions/checkout` with `ref: ${{ github.event.pull_request.head.sha }}`
+  or `ref: ${{ github.event.pull_request.head.ref }}` or similar PR-head references.
+  The `pull_request_target` event runs in the context of the base repository with access to
+  secrets, write tokens, and all repository permissions. When combined with a checkout of
+  fork-submitted code, any malicious code in the PR (modified build scripts, Makefiles,
+  package.json scripts, pre/post-install hooks, or workflow files themselves) executes with
+  full privileges of the target repository. This is the single most dangerous pattern in
+  GitHub Actions and has led to multiple real-world supply-chain compromises.
+
+tags:
+  - injection
+  - supply-chain
+  - fork-checkout
+
+attack_scenario: >
+  An attacker forks a popular open-source repository and submits a pull request. The PR
+  contains a modified build script, Makefile, or test configuration that includes a reverse
+  shell, secret exfiltration curl command, or supply-chain payload. Because the target
+  repository's workflow uses `pull_request_target` and then checks out the attacker's fork
+  code via `actions/checkout` with `ref: ${{ github.event.pull_request.head.sha }}`, the
+  malicious code runs with the base repository's GITHUB_TOKEN (which has write access to
+  the repository) and any configured secrets (NPM tokens, PyPI tokens, cloud credentials).
+  The attacker can exfiltrate secrets to an external server, push malicious commits to the
+  main branch, create new releases with backdoored artifacts, modify GitHub Pages, or
+  pivot to connected CI/CD infrastructure. In documented incidents, attackers exploited
+  exactly this pattern to steal GitHub Personal Access Tokens from high-profile open-source
+  projects, then used those tokens to push malicious code directly to main branches.
+
+real_world_incident: >
+  Multiple high-profile open-source projects have been compromised through GitHub Actions
+  workflows that used `pull_request_target` with an `actions/checkout` of the PR head.
+  Attackers submitted pull requests that modified CI scripts, which then ran in the
+  privileged context of the base repository. The attackers exfiltrated Personal Access
+  Tokens to external servers and used them to push malicious commits directly to the
+  target repositories. These incidents demonstrated how a single misconfigured workflow
+  can compromise an entire project's supply chain.
+
+fix: |
+  **Option 1 (Preferred): Use `pull_request` trigger instead.**
+
+  The `pull_request` trigger runs in the context of the fork with read-only permissions
+  and no access to repository secrets. This is safe for building and testing PR code.
+
+  ```yaml
+  # SAFE: pull_request runs in fork context with limited permissions
+  on:
+    pull_request:
+      branches: [main]
+
+  jobs:
+    test:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4  # Checks out the PR merge commit safely
+        - run: npm test
+  ```
+
+  **Option 2: If `pull_request_target` is required, never checkout fork code.**
+
+  Some workflows legitimately need `pull_request_target` (e.g., to label PRs, post
+  comments). In these cases, never checkout or execute the PR's code:
+
+  ```yaml
+  on:
+    pull_request_target:
+      branches: [main]
+
+  jobs:
+    label:
+      runs-on: ubuntu-latest
+      steps:
+        # SAFE: Does not checkout fork code, only uses GitHub API
+        - uses: actions/labeler@v5
+          with:
+            repo-token: ${{ secrets.GITHUB_TOKEN }}
+  ```
+
+  **Option 3: Two-workflow approach for trusted operations on PR code.**
+
+  If you must run privileged operations after validating PR code, use a two-workflow
+  split: one unprivileged workflow that builds/tests the PR code and uploads artifacts,
+  and a second `workflow_run` triggered workflow that downloads and deploys artifacts
+  without checking out fork code.
+
+  ```yaml
+  # Workflow 1: Unprivileged build (runs in fork context)
+  name: Build PR
+  on:
+    pull_request:
+      branches: [main]
+  jobs:
+    build:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
+        - run: npm ci && npm run build
+        - uses: actions/upload-artifact@v4
+          with:
+            name: build-output
+            path: dist/
+
+  # Workflow 2: Privileged deploy (runs in base context, never checks out fork code)
+  name: Deploy Preview
+  on:
+    workflow_run:
+      workflows: ["Build PR"]
+      types: [completed]
+  jobs:
+    deploy:
+      if: github.event.workflow_run.conclusion == 'success'
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/download-artifact@v4
+          with:
+            run-id: ${{ github.event.workflow_run.id }}
+        # Deploy artifact WITHOUT checking out any fork code
+  ```
+
+references: []

