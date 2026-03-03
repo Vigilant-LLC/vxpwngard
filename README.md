@@ -114,10 +114,16 @@ Summary: 11 findings (3 critical, 6 high, 2 medium) across 3 workflows.
 
 ## Install
 
-**One-liner:**
+**One-liner (macOS/Linux):**
 
 ```bash
 curl -sSfL https://raw.githubusercontent.com/Vigilant-LLC/vxpwngard/main/install.sh | bash
+```
+
+**Homebrew (macOS/Linux):**
+
+```bash
+brew install Vigilant-LLC/tap/vxpwngard
 ```
 
 **From source:**
@@ -126,11 +132,9 @@ curl -sSfL https://raw.githubusercontent.com/Vigilant-LLC/vxpwngard/main/install
 go install github.com/Vigilant-LLC/vxpwngard/cmd/vxpwngard@latest
 ```
 
-**Homebrew (macOS/Linux):**
+**Download binaries:**
 
-```bash
-brew install Vigilant-LLC/tap/vxpwngard
-```
+Pre-built binaries for Linux, macOS, and Windows (amd64/arm64) are available on the [Releases page](https://github.com/Vigilant-LLC/vxpwngard/releases).
 
 ---
 

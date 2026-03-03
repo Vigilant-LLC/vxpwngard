@@ -44,6 +44,19 @@ changelog:
       - "^ci:"
       - "^chore:"
 
+brews:
+  - repository:
+      owner: Vigilant-LLC
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: "https://github.com/Vigilant-LLC/vxpwngard"
+    description: "CI/CD source-to-sink vulnerability scanner for GitHub Actions"
+    license: "Apache-2.0"
+    install: |
+      bin.install "vxpwngard"
+    test: |
+      system "#{bin}/vxpwngard", "version"
+
 release:
   github:
     owner: Vigilant-LLC
