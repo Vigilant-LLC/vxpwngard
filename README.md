@@ -246,6 +246,8 @@ jobs:
 
 Findings appear directly in the GitHub Security tab under Code Scanning alerts.
 
+To make the scan a required check that blocks PRs with vulnerabilities, enable branch protection: **Settings → Branches → Add rule → Require status checks** and select the `vxpwngard` job.
+
 ---
 
 ## Contributing
