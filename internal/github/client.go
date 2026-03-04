@@ -49,6 +49,8 @@ type contentsEntry struct {
 //   - github.com/owner/repo@branch
 //   - https://github.com/owner/repo
 //   - https://github.com/owner/repo@branch
+//   - github://owner/repo
+//   - github://owner/repo@branch
 //   - owner/repo (bare format)
 //   - owner/repo@branch
 func ParseRepoPath(path string) (owner, repo, branch string, err error) {
@@ -57,6 +59,7 @@ func ParseRepoPath(path string) (owner, repo, branch string, err error) {
 	path = strings.TrimRight(path, "/")
 
 	// Strip common prefixes.
+	path = strings.TrimPrefix(path, "github://")
 	path = strings.TrimPrefix(path, "https://")
 	path = strings.TrimPrefix(path, "http://")
 	path = strings.TrimPrefix(path, "github.com/")
@@ -103,25 +106,27 @@ func ParseRepoPath(path string) (owner, repo, branch string, err error) {
 }
 
 // IsRemotePath returns true if the given path looks like a GitHub remote
-// repository reference. It checks for the "github.com/" or
-// "https://github.com/" prefix.
+// repository reference. It checks for "github.com/", "https://github.com/",
+// or "github://" prefixes.
 func IsRemotePath(path string) bool {
 	path = strings.TrimSpace(path)
 	return strings.HasPrefix(path, "github.com/") ||
 		strings.HasPrefix(path, "https://github.com/") ||
-		strings.HasPrefix(path, "http://github.com/")
+		strings.HasPrefix(path, "http://github.com/") ||
+		strings.HasPrefix(path, "github://")
 }
 
 // FetchWorkflows fetches all workflow YAML files from a GitHub repository.
 // The repoPath should be in the format "owner/repo" or "owner/repo@branch",
-// optionally prefixed with "github.com/".
+// optionally prefixed with "github.com/", "https://github.com/", or "github://".
 //
 // If the GITHUB_TOKEN environment variable is set, it is used for
 // authentication, which provides higher API rate limits (5,000 vs 60
 // requests per hour for unauthenticated requests).
 //
 // Returns a map of filename -> file content bytes. Only files ending in
-// .yml or .yaml are included.
+// .yml or .yaml are included. Returns an empty map (not an error) when
+// the repository has no .github/workflows directory.
 func FetchWorkflows(repoPath string) (map[string][]byte, error) {
 	owner, repo, branch, err := ParseRepoPath(repoPath)
 	if err != nil {
@@ -161,10 +166,6 @@ func FetchWorkflows(repoPath string) (map[string][]byte, error) {
 		workflows[entry.Name] = content
 	}
 
-	if len(workflows) == 0 {
-		return nil, fmt.Errorf("no workflow files found in %s/%s", owner, repo)
-	}
-
 	return workflows, nil
 }
 
@@ -192,7 +193,10 @@ func fetchDirectoryListing(client *http.Client, url, owner, repo string) ([]cont
 	case http.StatusOK:
 		// Success — parse the JSON response.
 	case http.StatusNotFound:
-		return nil, fmt.Errorf("repository %s/%s not found, or it has no .github/workflows directory", owner, repo)
+		// 404 means the repo has no .github/workflows directory (or the repo
+		// itself doesn't exist). Return an empty slice so the caller can
+		// distinguish "nothing to scan" from a real error.
+		return nil, nil
 	case http.StatusForbidden:
 		return nil, fmt.Errorf("access denied for %s/%s: the repository may be private, or the GitHub API rate limit has been exceeded; set GITHUB_TOKEN env var for higher limits", owner, repo)
 	default:

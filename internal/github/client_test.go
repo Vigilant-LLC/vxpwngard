@@ -171,6 +171,38 @@ func TestParseRepoPath_HTTPPrefix(t *testing.T) {
 	}
 }
 
+func TestParseRepoPath_GithubProtocol(t *testing.T) {
+	owner, repo, branch, err := ParseRepoPath("github://owner/repo")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if owner != "owner" {
+		t.Errorf("owner = %q, want %q", owner, "owner")
+	}
+	if repo != "repo" {
+		t.Errorf("repo = %q, want %q", repo, "repo")
+	}
+	if branch != "" {
+		t.Errorf("branch = %q, want %q", branch, "")
+	}
+}
+
+func TestParseRepoPath_GithubProtocolWithBranch(t *testing.T) {
+	owner, repo, branch, err := ParseRepoPath("github://owner/repo@develop")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if owner != "owner" {
+		t.Errorf("owner = %q, want %q", owner, "owner")
+	}
+	if repo != "repo" {
+		t.Errorf("repo = %q, want %q", repo, "repo")
+	}
+	if branch != "develop" {
+		t.Errorf("branch = %q, want %q", branch, "develop")
+	}
+}
+
 // ---------------------------------------------------------------------------
 // ParseRepoPath error cases
 // ---------------------------------------------------------------------------
@@ -238,6 +270,8 @@ func TestIsRemotePath_GithubComPrefix(t *testing.T) {
 		{"https://github.com/owner/repo", true},
 		{"https://github.com/owner/repo@branch", true},
 		{"http://github.com/owner/repo", true},
+		{"github://owner/repo", true},
+		{"github://owner/repo@main", true},
 		{"./local/path", false},
 		{"/absolute/local/path", false},
 		{".", false},
