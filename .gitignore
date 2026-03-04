@@ -42,3 +42,6 @@ bin/
 
 # Prompt files
 claudecode-prompt.md
+
+# Scan research targets
+scan-targets.tsv
