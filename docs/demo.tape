@@ -8,6 +8,8 @@ Set Padding 30
 Set Framerate 24
 Set TypingSpeed 50ms
 
+Env PS1 "$ "
+
 # Show the demo scan
 Type "vxpwngard demo"
 Sleep 1s
