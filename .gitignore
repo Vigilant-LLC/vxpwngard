@@ -45,4 +45,15 @@ claudecode-prompt.md
 
 # Scan research targets
 scan-targets.tsv
+scan-targets-50k.tsv
 scan-results/
+
+# Pipeline operational data
+pipeline/tracking.db
+pipeline/tracking.db-wal
+pipeline/tracking.db-shm
+pipeline/checkpoints/
+pipeline/clones/
+
+# Internal campaign docs (not public)
+docs/campaign-plan.md
