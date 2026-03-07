@@ -122,7 +122,7 @@ func processFileEnvExtract(path string, matcher ExpressionMatcher, ruleID string
 		var matchingExprs []string
 		seen := make(map[string]bool)
 		for _, expr := range exprs {
-			if !seen[expr] && matcher(expr) {
+			if !seen[expr] && matcher(expr) && !isInsideSingleQuotes(runContent, expr) {
 				matchingExprs = append(matchingExprs, expr)
 				seen[expr] = true
 			}
@@ -155,13 +155,15 @@ func processFileEnvExtract(path string, matcher ExpressionMatcher, ruleID string
 		}
 
 		// Replace expressions in run content with env var references.
+		// Skip expressions inside single-quoted strings — shell won't expand
+		// variables in single quotes, so replacing would break behavior.
 		for _, entry := range entries {
 			if isMulti {
 				for j := contentStart; j <= contentEnd; j++ {
-					lines[j] = strings.ReplaceAll(lines[j], entry.expr, "${"+entry.name+"}")
+					lines[j] = replaceOutsideSingleQuotes(lines[j], entry.expr, "${"+entry.name+"}")
 				}
 			} else {
-				lines[i] = strings.ReplaceAll(lines[i], entry.expr, "${"+entry.name+"}")
+				lines[i] = replaceOutsideSingleQuotes(lines[i], entry.expr, "${"+entry.name+"}")
 			}
 		}
 
@@ -230,11 +232,15 @@ func computePropIndent(prefix string) int {
 	return len(prefix) - len(strings.TrimLeft(prefix, " \t"))
 }
 
+// blockScalarRe matches YAML block scalar indicators: |, >, with optional
+// indent number and chomping indicator (e.g., |2, >-, |2-, >+, |2+).
+var blockScalarRe = regexp.MustCompile(`^[|>][0-9]*[-+]?$`)
+
 // parseRunBounds returns the start and end line indices of run block content.
 // Returns -1, -1, false if no content is found.
 func parseRunBounds(lines []string, keyLine int, afterRun string, propIndent int) (int, int, bool) {
-	// Multi-line block scalars: |, >, |-, >-, |+, >+
-	if afterRun == "|" || afterRun == ">" || afterRun == "|-" || afterRun == ">-" || afterRun == "|+" || afterRun == ">+" {
+	// Multi-line block scalars: |, >, |-, >-, |+, >+, |2, >2, |2-, etc.
+	if blockScalarRe.MatchString(afterRun) {
 		start := keyLine + 1
 		end := start
 		for end < len(lines) {
@@ -321,6 +327,11 @@ func findExistingEnvInStep(lines []string, stepStart, stepEnd, propIndent int) i
 		if ci == propIndent && trimmed == "env:" {
 			return j
 		}
+		// Handle "env: {}" inline flow mapping — convert to block style.
+		if ci == propIndent && trimmed == "env: {}" {
+			lines[j] = strings.Repeat(" ", propIndent) + "env:"
+			return j
+		}
 		// Handle "- env:" on the step start line (rare but valid)
 		if strings.HasSuffix(strings.TrimSpace(strings.TrimLeft(line, " \t-")), "env:") && ci < propIndent {
 			continue // skip — this is the step dash line with a different key
@@ -360,12 +371,31 @@ func countIndent(line string) int {
 	return len(line) - len(strings.TrimLeft(line, " \t"))
 }
 
-// extractContextPath strips ${{ and }} from an expression, returning the inner path.
+// contextPathRe matches a dotted GitHub context path like github.event.pull_request.title
+// or secrets.FOO inside a potentially compound expression.
+var contextPathRe = regexp.MustCompile(`(github\.[a-zA-Z0-9_.]+|secrets\.[a-zA-Z0-9_]+)`)
+
+// extractContextPath strips ${{ and }} from an expression and extracts the
+// primary context path. For compound expressions like toJSON(github.event.issue.body),
+// it extracts the first recognizable context path.
 func extractContextPath(expr string) string {
 	inner := strings.TrimSpace(expr)
 	inner = strings.TrimPrefix(inner, "${{")
 	inner = strings.TrimSuffix(inner, "}}")
-	return strings.TrimSpace(inner)
+	inner = strings.TrimSpace(inner)
+
+	// If it's a simple context path (no parens, no operators), return as-is.
+	if !strings.ContainsAny(inner, "()!|&, ") {
+		return inner
+	}
+
+	// Extract the first recognizable context path from compound expressions.
+	if m := contextPathRe.FindString(inner); m != "" {
+		return m
+	}
+
+	// Fallback: return the whole inner expression.
+	return inner
 }
 
 // deriveEnvVarName generates a shell-safe environment variable name from a
@@ -400,6 +430,50 @@ func deriveEnvVarName(contextPath string) string {
 	}
 
 	return strings.ToUpper(sanitizeEnvName(contextPath))
+}
+
+// isInsideSingleQuotes checks whether the FIRST occurrence of target in text
+// falls within a single-quoted string. Shell does not expand variables inside
+// single quotes, so we must not replace expressions there.
+func isInsideSingleQuotes(text, target string) bool {
+	idx := strings.Index(text, target)
+	if idx < 0 {
+		return false
+	}
+	// Count unescaped single quotes before the target position.
+	count := 0
+	for i := 0; i < idx; i++ {
+		if text[i] == '\'' {
+			count++
+		}
+	}
+	// Odd count means we're inside single quotes.
+	return count%2 == 1
+}
+
+// replaceOutsideSingleQuotes replaces occurrences of old with new_ in line,
+// but only when the occurrence is NOT inside a single-quoted string.
+func replaceOutsideSingleQuotes(line, old, new_ string) string {
+	idx := strings.Index(line, old)
+	if idx < 0 {
+		return line
+	}
+
+	// Count single quotes before this occurrence.
+	count := 0
+	for i := 0; i < idx; i++ {
+		if line[i] == '\'' {
+			count++
+		}
+	}
+
+	if count%2 == 1 {
+		// Inside single quotes — skip this occurrence, try the rest.
+		return line[:idx+len(old)] + replaceOutsideSingleQuotes(line[idx+len(old):], old, new_)
+	}
+
+	// Outside single quotes — replace and continue with the rest.
+	return line[:idx] + new_ + replaceOutsideSingleQuotes(line[idx+len(old):], old, new_)
 }
 
 // sanitizeEnvName replaces non-alphanumeric characters with underscores.

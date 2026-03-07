@@ -96,6 +96,7 @@ func processFileDebugRemoval(path string, dryRun bool) ([]FixResult, error) {
 }
 
 // isDebugEnvEntry checks if a trimmed line is a debug env variable set to true.
+// Handles both unquoted (true) and quoted ('true', "true") YAML values.
 func isDebugEnvEntry(trimmed string) bool {
 	for _, dv := range debugVars {
 		if !strings.HasPrefix(strings.ToUpper(trimmed), dv+":") {
@@ -104,12 +105,24 @@ func isDebugEnvEntry(trimmed string) bool {
 		parts := strings.SplitN(trimmed, ":", 2)
 		if len(parts) == 2 {
 			val := strings.TrimSpace(parts[1])
+			// Strip surrounding quotes if present.
+			val = stripYAMLQuotes(val)
 			if strings.EqualFold(val, "true") {
 				return true
 			}
 		}
 	}
 	return false
+}
+
+// stripYAMLQuotes removes surrounding single or double quotes from a value.
+func stripYAMLQuotes(s string) string {
+	if len(s) >= 2 {
+		if (s[0] == '\'' && s[len(s)-1] == '\'') || (s[0] == '"' && s[len(s)-1] == '"') {
+			return s[1 : len(s)-1]
+		}
+	}
+	return s
 }
 
 // extractEnvKey returns the key name from a "KEY: value" line.

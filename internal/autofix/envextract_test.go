@@ -207,6 +207,147 @@ jobs:
 }
 
 // ---------------------------------------------------------------------------
+// Single-quote safety tests (P0)
+// ---------------------------------------------------------------------------
+
+func TestEnvExtract_SkipsSingleQuotedExpressions(t *testing.T) {
+	original := `name: CI
+on: push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo '${{ github.event.pull_request.title }}'
+`
+	dir := setupWorkflowFile(t, original)
+
+	results, err := ExtractExpressionsToEnv(dir, tier1Matcher, "VXS-002", false)
+	require.NoError(t, err)
+	assert.Empty(t, results, "should not extract expressions inside single quotes")
+
+	content := readWorkflowFile(t, dir)
+	assert.Equal(t, original, content, "file should not be modified")
+}
+
+func TestEnvExtract_MixedQuotesExtractsDoubleQuotedOnly(t *testing.T) {
+	dir := setupWorkflowFile(t, `name: CI
+on: push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo '${{ github.event.pull_request.title }}'
+          echo "${{ github.head_ref }}"
+`)
+
+	results, err := ExtractExpressionsToEnv(dir, tier1Matcher, "VXS-002", false)
+	require.NoError(t, err)
+	assert.Len(t, results, 1, "should only extract the double-quoted expression")
+
+	content := readWorkflowFile(t, dir)
+	assert.Contains(t, content, "${HEAD_REF}")
+	assert.Contains(t, content, "${{ github.event.pull_request.title }}", "single-quoted expr should remain untouched")
+}
+
+// ---------------------------------------------------------------------------
+// Compound expression env var name tests (P1)
+// ---------------------------------------------------------------------------
+
+func TestDeriveEnvVarName_CompoundExpression(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"toJSON(github.event.pull_request.body)", "PR_BODY"},
+		{"format('{0}', github.head_ref)", "HEAD_REF"},
+		{"github.event.issue.title || 'default'", "ISSUE_TITLE"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			path := extractContextPath("${{ " + tt.input + " }}")
+			result := deriveEnvVarName(path)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Debug env quoted true tests (P1)
+// ---------------------------------------------------------------------------
+
+func TestFixDebugEnv_RemovesQuotedTrue(t *testing.T) {
+	dir := setupWorkflowFile(t, `name: CI
+on: push
+
+env:
+  ACTIONS_RUNNER_DEBUG: 'true'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "hello"
+`)
+
+	results, err := FixDebugEnvVars(dir, false)
+	require.NoError(t, err)
+	assert.Len(t, results, 1)
+
+	content := readWorkflowFile(t, dir)
+	assert.NotContains(t, content, "ACTIONS_RUNNER_DEBUG")
+}
+
+func TestFixDebugEnv_RemovesDoubleQuotedTrue(t *testing.T) {
+	dir := setupWorkflowFile(t, `name: CI
+on: push
+
+env:
+  ACTIONS_STEP_DEBUG: "true"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "hello"
+`)
+
+	results, err := FixDebugEnvVars(dir, false)
+	require.NoError(t, err)
+	assert.Len(t, results, 1)
+
+	content := readWorkflowFile(t, dir)
+	assert.NotContains(t, content, "ACTIONS_STEP_DEBUG")
+}
+
+// ---------------------------------------------------------------------------
+// Block scalar indicator tests (P2)
+// ---------------------------------------------------------------------------
+
+func TestEnvExtract_BlockScalarWithIndentIndicator(t *testing.T) {
+	dir := setupWorkflowFile(t, `name: CI
+on: push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |2
+          echo "${{ github.event.pull_request.title }}"
+`)
+
+	results, err := ExtractExpressionsToEnv(dir, tier1Matcher, "VXS-002", false)
+	require.NoError(t, err)
+	assert.Len(t, results, 1)
+
+	content := readWorkflowFile(t, dir)
+	assert.Contains(t, content, "${PR_TITLE}")
+	assert.Contains(t, content, "PR_TITLE: ${{ github.event.pull_request.title }}")
+}
+
+// ---------------------------------------------------------------------------
 // Env var name derivation tests
 // ---------------------------------------------------------------------------
 
