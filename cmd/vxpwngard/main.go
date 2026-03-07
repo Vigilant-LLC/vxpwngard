@@ -23,6 +23,7 @@ import (
 	"github.com/Vigilant-LLC/vxpwngard/internal/reporter"
 	"github.com/Vigilant-LLC/vxpwngard/internal/rules"
 	"github.com/Vigilant-LLC/vxpwngard/internal/scanner"
+	"github.com/Vigilant-LLC/vxpwngard/internal/tracking"
 )
 
 // Build-time variables injected via ldflags:
@@ -91,6 +92,10 @@ func main() {
 		newDemoCmd(),
 		newBaselineCmd(),
 		newFixCmd(),
+		newTargetsCmd(),
+		newBatchCmd(),
+		newImportCmd(),
+		newStatsCmd(),
 		newVersionCmd(),
 	)
 
@@ -130,6 +135,7 @@ func newScanCmd() *cobra.Command {
 		changedOnly bool
 		output      string
 		noColor     bool
+		trackingDB  string
 	)
 
 	cmd := &cobra.Command{
@@ -221,6 +227,26 @@ Path can be:
 				return err
 			}
 
+			// Record results in tracking DB if --tracking-db is set.
+			if trackingDB != "" && ghclient.IsRemotePath(path) {
+				owner, repo, _, parseErr := ghclient.ParseRepoPath(path)
+				if parseErr == nil {
+					tdb, dbErr := tracking.Open(trackingDB)
+					if dbErr == nil {
+						defer tdb.Close()
+						repoID, _ := tdb.UpsertRepo(owner, repo, 0, "")
+						status := tracking.StatusCompleted
+						if len(result.Findings) == 0 {
+							status = tracking.StatusCompleted
+						}
+						scanID, _ := tdb.InsertScan(repoID, status, duration.Milliseconds(), "")
+						for _, f := range result.Findings {
+							tdb.InsertFinding(scanID, f.RuleID, strings.ToLower(f.Severity), f.File, f.LineNumber)
+						}
+					}
+				}
+			}
+
 			os.Exit(result.ExitCode)
 			return nil // unreachable, but keeps the compiler happy
 		},
@@ -232,6 +258,7 @@ Path can be:
 	cmd.Flags().BoolVar(&changedOnly, "changed-only", false, "Only scan workflow files changed in current git branch")
 	cmd.Flags().StringVarP(&output, "output", "o", "", "Write report to file instead of stdout")
 	cmd.Flags().BoolVar(&noColor, "no-color", false, "Disable ANSI color output")
+	cmd.Flags().StringVar(&trackingDB, "tracking-db", "", "Record scan results in tracking database")
 
 	return cmd
 }
@@ -543,6 +570,378 @@ Use --rule to apply a specific rule's fix (e.g. --rule VXS-007).`,
 
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview changes without modifying files")
 	cmd.Flags().StringVar(&ruleFilter, "rule", "", "Apply fix for a specific rule only (e.g. VXS-007)")
+
+	return cmd
+}
+
+// ---------------------------------------------------------------------------
+// targets command
+// ---------------------------------------------------------------------------
+
+func newTargetsCmd() *cobra.Command {
+	var (
+		output     string
+		dbPath     string
+		minStars   int
+		maxTargets int
+		appendMode bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "targets",
+		Short: "Generate a target list of GitHub repos via Search API",
+		Long: `Searches the GitHub Search API for repositories with GitHub Actions
+workflows, partitioning by star count to overcome the 1,000 result limit.
+
+Requires GITHUB_TOKEN environment variable for authentication.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			printHeader(os.Stderr)
+
+			results, err := ghclient.SearchAllTiers(maxTargets, minStars, func(msg string) {
+				fmt.Fprintln(os.Stderr, msg)
+			})
+			if err != nil {
+				return err
+			}
+
+			fmt.Fprintf(os.Stderr, "\nFound %d repos total\n", len(results))
+
+			// Write to tracking DB if --db specified.
+			if dbPath != "" {
+				db, err := tracking.Open(dbPath)
+				if err != nil {
+					return err
+				}
+				defer db.Close()
+
+				imported := 0
+				for _, r := range results {
+					if _, err := db.UpsertRepo(r.Owner, r.Name, r.Stars, r.Language); err != nil {
+						fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
+						continue
+					}
+					imported++
+				}
+				fmt.Fprintf(os.Stdout, "Imported %d repos into %s\n", imported, dbPath)
+			}
+
+			// Write to TSV file.
+			if output != "" {
+				flags := os.O_WRONLY | os.O_CREATE
+				if appendMode {
+					flags |= os.O_APPEND
+				} else {
+					flags |= os.O_TRUNC
+				}
+				f, err := os.OpenFile(output, flags, 0644)
+				if err != nil {
+					return fmt.Errorf("opening output file: %w", err)
+				}
+				defer f.Close()
+
+				if !appendMode {
+					fmt.Fprintln(f, "# repo\tstars\tlanguage\tdescription")
+				}
+				for _, r := range results {
+					fmt.Fprintf(f, "%s\t%d\t%s\t%s\n", r.FullName, r.Stars, r.Language, r.Description)
+				}
+				fmt.Fprintf(os.Stdout, "Wrote %d repos to %s\n", len(results), output)
+			}
+
+			// Default: print to stdout if no output specified.
+			if output == "" && dbPath == "" {
+				for _, r := range results {
+					fmt.Fprintf(os.Stdout, "%s\t%d\t%s\n", r.FullName, r.Stars, r.Language)
+				}
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&output, "output", "o", "", "Output TSV file path")
+	cmd.Flags().StringVar(&dbPath, "db", "", "Import results into tracking database")
+	cmd.Flags().IntVar(&minStars, "min-stars", 500, "Minimum star count")
+	cmd.Flags().IntVar(&maxTargets, "max-targets", 50000, "Maximum number of targets")
+	cmd.Flags().BoolVar(&appendMode, "append", false, "Append to existing output file")
+
+	return cmd
+}
+
+// ---------------------------------------------------------------------------
+// batch command
+// ---------------------------------------------------------------------------
+
+func newBatchCmd() *cobra.Command {
+	var (
+		dbPath      string
+		count       int
+		delay       float64
+		retryErrors bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "batch",
+		Short: "Batch scan repos from the tracking database",
+		Long: `Reads pending (unscanned) repos from the tracking database and scans
+each one via the GitHub Contents API. Results are recorded back into the DB.
+
+Use --retry-errors to re-scan repos that previously failed.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			printHeader(os.Stderr)
+
+			db, err := tracking.Open(dbPath)
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+
+			var repos []tracking.Repo
+			if retryErrors {
+				repos, err = db.GetErroredRepos(count)
+			} else {
+				repos, err = db.GetPendingRepos(count)
+			}
+			if err != nil {
+				return err
+			}
+
+			if len(repos) == 0 {
+				fmt.Fprintln(os.Stdout, "No pending repos to scan.")
+				return nil
+			}
+
+			fmt.Fprintf(os.Stderr, "Scanning %d repos...\n\n", len(repos))
+
+			scanned, withFindings, totalFindings := 0, 0, 0
+
+			for i, repo := range repos {
+				fmt.Fprintf(os.Stderr, "[%d/%d] %s (%d\u2605)...", i+1, len(repos), repo.FullName, repo.Stars)
+
+				start := time.Now()
+				path := "github.com/" + repo.FullName
+
+				files, fetchErr := ghclient.FetchWorkflows(path)
+				if fetchErr != nil {
+					duration := time.Since(start)
+					db.InsertScan(repo.ID, tracking.StatusError, duration.Milliseconds(), fetchErr.Error())
+					fmt.Fprintf(os.Stderr, " error: %v\n", fetchErr)
+					time.Sleep(time.Duration(delay*1000) * time.Millisecond)
+					continue
+				}
+
+				if len(files) == 0 {
+					duration := time.Since(start)
+					db.InsertScan(repo.ID, tracking.StatusNoWorkflows, duration.Milliseconds(), "")
+					fmt.Fprintf(os.Stderr, " no workflows\n")
+					time.Sleep(time.Duration(delay*1000) * time.Millisecond)
+					continue
+				}
+
+				cfg := scanner.Config{
+					Path:    path,
+					Format:  "json",
+					FailOn:  "critical",
+					RulesFS: vxpwngard.RulesFS,
+				}
+
+				result, scanErr := scanner.RunOnBytes(cfg, files)
+				duration := time.Since(start)
+
+				if scanErr != nil {
+					db.InsertScan(repo.ID, tracking.StatusError, duration.Milliseconds(), scanErr.Error())
+					fmt.Fprintf(os.Stderr, " scan error: %v\n", scanErr)
+					time.Sleep(time.Duration(delay*1000) * time.Millisecond)
+					continue
+				}
+
+				scanID, dbErr := db.InsertScan(repo.ID, tracking.StatusCompleted, duration.Milliseconds(), "")
+				if dbErr != nil {
+					fmt.Fprintf(os.Stderr, " db error: %v\n", dbErr)
+					continue
+				}
+
+				for _, f := range result.Findings {
+					db.InsertFinding(scanID, f.RuleID, strings.ToLower(f.Severity), f.File, f.LineNumber)
+				}
+
+				scanned++
+				if len(result.Findings) > 0 {
+					withFindings++
+					totalFindings += len(result.Findings)
+				}
+				fmt.Fprintf(os.Stderr, " %d findings (%.1fs)\n", len(result.Findings), duration.Seconds())
+
+				if i < len(repos)-1 {
+					time.Sleep(time.Duration(delay*1000) * time.Millisecond)
+				}
+			}
+
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintf(os.Stdout, "Batch complete: %d scanned, %d with findings (%d total findings)\n",
+				scanned, withFindings, totalFindings)
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&dbPath, "db", "vxpwngard-tracking.db", "Path to tracking database")
+	cmd.Flags().IntVar(&count, "count", 100, "Number of repos to scan")
+	cmd.Flags().Float64Var(&delay, "delay", 1.5, "Delay between scans in seconds")
+	cmd.Flags().BoolVar(&retryErrors, "retry-errors", false, "Retry previously errored scans")
+
+	return cmd
+}
+
+// ---------------------------------------------------------------------------
+// import command
+// ---------------------------------------------------------------------------
+
+func newImportCmd() *cobra.Command {
+	var (
+		dbPath     string
+		resultsDir string
+		targets    string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "import",
+		Short: "Import existing scan results into the tracking database",
+		Long: `Imports repos from a targets TSV file and scan results from a directory
+of JSON files into the tracking database. Used to migrate existing scan
+data from the shell-based batch scanning workflow.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			printHeader(os.Stderr)
+
+			db, err := tracking.Open(dbPath)
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+
+			// Import targets TSV if specified.
+			if targets != "" {
+				count, err := db.ImportTargetsTSV(targets)
+				if err != nil {
+					return fmt.Errorf("importing targets: %w", err)
+				}
+				fmt.Fprintf(os.Stdout, "Imported %d repos from %s\n", count, targets)
+			}
+
+			// Import scan results.
+			if resultsDir != "" {
+				count, err := db.ImportScanResults(resultsDir)
+				if err != nil {
+					return fmt.Errorf("importing results: %w", err)
+				}
+				fmt.Fprintf(os.Stdout, "Imported %d scan results from %s\n", count, resultsDir)
+			}
+
+			// Show final count.
+			total, _ := db.RepoCount()
+			fmt.Fprintf(os.Stdout, "Database now contains %d repos\n", total)
+
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&dbPath, "db", "vxpwngard-tracking.db", "Path to tracking database")
+	cmd.Flags().StringVar(&resultsDir, "results-dir", "scan-results", "Directory with scan result JSON files")
+	cmd.Flags().StringVar(&targets, "targets", "scan-targets.tsv", "Path to targets TSV file")
+
+	return cmd
+}
+
+// ---------------------------------------------------------------------------
+// stats command
+// ---------------------------------------------------------------------------
+
+func newStatsCmd() *cobra.Command {
+	var (
+		dbPath  string
+		format  string
+		section string
+		noColor bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "stats",
+		Short: "Display analytics dashboard from tracking database",
+		Long: `Queries the tracking database and renders a dashboard with scan
+statistics, severity breakdowns, top rules, and language analysis.
+
+The console output is designed for social media screenshots.
+Use --format json for machine-readable output.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if noColor || !isTTY() {
+				color.NoColor = true
+			}
+
+			db, err := tracking.Open(dbPath)
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+
+			stats, err := db.GetOverviewStats()
+			if err != nil {
+				return fmt.Errorf("getting stats: %w", err)
+			}
+
+			topRules, err := db.GetTopRules(15)
+			if err != nil {
+				return fmt.Errorf("getting top rules: %w", err)
+			}
+
+			langStats, err := db.GetLanguageStats(15)
+			if err != nil {
+				return fmt.Errorf("getting language stats: %w", err)
+			}
+
+			timeline, err := db.GetTimeline()
+			if err != nil {
+				return fmt.Errorf("getting timeline: %w", err)
+			}
+
+			if format == "json" {
+				data := tracking.StatsJSON{
+					Overview:  stats,
+					TopRules:  topRules,
+					Languages: langStats,
+					Timeline:  timeline,
+				}
+				enc := json.NewEncoder(os.Stdout)
+				enc.SetIndent("", "  ")
+				return enc.Encode(data)
+			}
+
+			// Console output.
+			w := os.Stdout
+			showSection := func(name string) bool {
+				return section == "all" || section == name
+			}
+
+			if showSection("overview") {
+				tracking.RenderOverview(w, stats)
+			}
+			if showSection("rules") && len(topRules) > 0 {
+				tracking.RenderTopRules(w, topRules)
+			}
+			if showSection("languages") && len(langStats) > 0 {
+				tracking.RenderLanguageStats(w, langStats)
+			}
+			if showSection("timeline") && len(timeline) > 0 {
+				tracking.RenderTimeline(w, timeline)
+			}
+			fmt.Fprintln(w)
+
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&dbPath, "db", "vxpwngard-tracking.db", "Path to tracking database")
+	cmd.Flags().StringVarP(&format, "format", "f", "console", "Output format: console, json")
+	cmd.Flags().StringVar(&section, "section", "all", "Dashboard section: all, overview, rules, languages, timeline")
+	cmd.Flags().BoolVar(&noColor, "no-color", false, "Disable ANSI color output")
 
 	return cmd
 }

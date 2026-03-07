@@ -48,7 +48,10 @@ scan-targets.tsv
 scan-targets-50k.tsv
 scan-results/
 
-# Pipeline operational data
+# Tracking databases (SQLite)
+*.db
+*.db-wal
+*.db-shm
 pipeline/tracking.db
 pipeline/tracking.db-wal
 pipeline/tracking.db-shm
