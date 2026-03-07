@@ -79,6 +79,8 @@ func (e *Engine) registerCheckers() {
 	e.checkers["VXS-010"] = e.checkVXS010
 	e.checkers["VXS-011"] = e.checkVXS011
 	e.checkers["VXS-012"] = e.checkVXS012
+	e.checkers["VXS-014"] = e.checkVXS014
+	e.checkers["VXS-015"] = e.checkVXS015
 }
 
 // Evaluate runs all registered checkers against all provided workflows,
@@ -335,6 +337,8 @@ func defaultRuleMetadata() map[string]*RuleMetadata {
 		"VXS-010": {ID: "VXS-010", Name: "AI Agent Config Poisoning via Fork PR", Severity: "high"},
 		"VXS-011": {ID: "VXS-011", Name: "MCP Config Injection via Fork Checkout", Severity: "high"},
 		"VXS-012": {ID: "VXS-012", Name: "External Network Access with Secrets Context", Severity: "medium"},
+		"VXS-014": {ID: "VXS-014", Name: "Expression Injection via workflow_dispatch Input", Severity: "high"},
+		"VXS-015": {ID: "VXS-015", Name: "Actions Runner Debug Logging Enabled", Severity: "medium"},
 	}
 }
 
@@ -366,6 +370,12 @@ var (
 
 	// urlPattern extracts URLs from curl/wget invocations.
 	urlPattern = regexp.MustCompile(`https?://[^\s"'` + "`" + `]+`)
+
+	// dispatchInputPattern matches ${{ github.event.inputs.* }} expressions.
+	dispatchInputPattern = regexp.MustCompile(`(?i)github\.event\.inputs\.`)
+
+	// exprPattern matches ${{ ... }} expression syntax in run blocks.
+	exprPattern = regexp.MustCompile(`\$\{\{[^}]+\}\}`)
 
 	// sensitivePermissions lists scopes where write access is dangerous.
 	sensitivePermissions = []string{
@@ -453,7 +463,9 @@ func (e *Engine) checkVXS002(wf *parser.Workflow) []Finding {
 				continue
 			}
 
-			for _, expr := range step.Expressions {
+			// Only check expressions in the run block itself, not in env/with
+			// (where they are safely assigned to variables).
+			for _, expr := range exprPattern.FindAllString(step.Run, -1) {
 				if taint.IsTainted(expr, taint.Tier1Sources) {
 					f := e.makeFinding("VXS-002", wf, jobID, step,
 						"Tainted expression in run block: "+expr)
@@ -639,7 +651,9 @@ func (e *Engine) checkVXS008(wf *parser.Workflow) []Finding {
 				continue
 			}
 
-			for _, expr := range step.Expressions {
+			// Only check expressions in the run block itself, not in env/with
+			// (where they are safely assigned to variables — the correct pattern).
+			for _, expr := range exprPattern.FindAllString(step.Run, -1) {
 				lower := strings.ToLower(expr)
 				if strings.Contains(lower, "secrets.") || strings.Contains(lower, "github.token") {
 					f := e.makeFinding("VXS-008", wf, jobID, step,
@@ -815,6 +829,98 @@ func (e *Engine) checkVXS012(wf *parser.Workflow) []Finding {
 	}
 
 	return findings
+}
+
+// ---------------------------------------------------------------------------
+// VXS-014: Expression Injection via workflow_dispatch Input
+// ---------------------------------------------------------------------------
+
+func (e *Engine) checkVXS014(wf *parser.Workflow) []Finding {
+	var findings []Finding
+
+	for jobID, job := range wf.Jobs {
+		for _, step := range job.Steps {
+			if step.Run == "" {
+				continue
+			}
+
+			// Only flag expressions that appear in the run block itself,
+			// not in env/with (where they are safely assigned to variables).
+			for _, expr := range exprPattern.FindAllString(step.Run, -1) {
+				if dispatchInputPattern.MatchString(expr) {
+					f := e.makeFinding("VXS-014", wf, jobID, step,
+						"workflow_dispatch input interpolated in run block: "+expr)
+					findings = append(findings, f)
+				}
+			}
+		}
+	}
+
+	return findings
+}
+
+// ---------------------------------------------------------------------------
+// VXS-015: Actions Runner Debug Logging Enabled
+// ---------------------------------------------------------------------------
+
+func (e *Engine) checkVXS015(wf *parser.Workflow) []Finding {
+	var findings []Finding
+
+	debugVars := []string{"ACTIONS_RUNNER_DEBUG", "ACTIONS_STEP_DEBUG"}
+
+	// Check workflow-level env.
+	if envRaw, ok := wf.Raw["env"]; ok {
+		if envMap, ok := envRaw.(map[string]interface{}); ok {
+			for _, dv := range debugVars {
+				if val, ok := envMap[dv]; ok {
+					if isTrue(val) {
+						f := e.makeFinding("VXS-015", wf, "", nil,
+							"Debug variable "+dv+" enabled at workflow level")
+						findings = append(findings, f)
+					}
+				}
+			}
+		}
+	}
+
+	// Check job-level and step-level env.
+	for jobID, job := range wf.Jobs {
+		for _, dv := range debugVars {
+			if val, ok := job.Env[dv]; ok {
+				if strings.EqualFold(val, "true") {
+					f := e.makeFinding("VXS-015", wf, jobID, nil,
+						"Debug variable "+dv+" enabled at job level")
+					findings = append(findings, f)
+				}
+			}
+		}
+
+		for _, step := range job.Steps {
+			for _, dv := range debugVars {
+				if val, ok := step.Env[dv]; ok {
+					if strings.EqualFold(val, "true") {
+						f := e.makeFinding("VXS-015", wf, jobID, step,
+							"Debug variable "+dv+" enabled at step level")
+						findings = append(findings, f)
+					}
+				}
+			}
+		}
+	}
+
+	return findings
+}
+
+// isTrue checks if a YAML value represents boolean true.
+func isTrue(v interface{}) bool {
+	switch val := v.(type) {
+	case bool:
+		return val
+	case string:
+		return strings.EqualFold(val, "true")
+	default:
+		return false
+	}
 }
 
 // ---------------------------------------------------------------------------

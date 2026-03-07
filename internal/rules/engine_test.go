@@ -258,6 +258,36 @@ jobs:
 	assert.NotEmpty(t, vxs002, "expected VXS-002 for tainted comment body")
 }
 
+func TestVXS002_SafeEnvPattern(t *testing.T) {
+	wf := mustParseWorkflow(t, ".github/workflows/safe-env.yml", `
+name: Safe
+on:
+  pull_request:
+    types: [opened]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Echo PR title
+        run: echo "${PR_TITLE}"
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+`)
+
+	engine := NewEngineWithDefaults()
+	findings := engine.Evaluate([]*parser.Workflow{wf})
+
+	var vxs002 []Finding
+	for _, f := range findings {
+		if f.RuleID == "VXS-002" {
+			vxs002 = append(vxs002, f)
+		}
+	}
+
+	assert.Empty(t, vxs002, "should not flag VXS-002 when expression is safely in env block")
+}
+
 // ---------------------------------------------------------------------------
 // VXS-004: Privileged Trigger with Secrets and No Author Check
 // ---------------------------------------------------------------------------
@@ -474,6 +504,280 @@ jobs:
 	}
 
 	assert.Empty(t, vxs006, "should not flag VXS-006 for eval without expressions")
+}
+
+// ---------------------------------------------------------------------------
+// VXS-014: Expression Injection via workflow_dispatch Input
+// ---------------------------------------------------------------------------
+
+func TestVXS014_DispatchInputInRunBlock(t *testing.T) {
+	wf := mustParseWorkflow(t, ".github/workflows/deploy.yml", `
+name: Deploy
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy'
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy version
+        run: echo "Deploying ${{ github.event.inputs.version }}"
+`)
+
+	engine := NewEngineWithDefaults()
+	findings := engine.Evaluate([]*parser.Workflow{wf})
+
+	var vxs014 []Finding
+	for _, f := range findings {
+		if f.RuleID == "VXS-014" {
+			vxs014 = append(vxs014, f)
+		}
+	}
+
+	assert.NotEmpty(t, vxs014, "expected VXS-014 for dispatch input in run block")
+	assert.Contains(t, vxs014[0].Evidence, "github.event.inputs.version")
+}
+
+func TestVXS014_MultipleInputsInSeparateSteps(t *testing.T) {
+	wf := mustParseWorkflow(t, ".github/workflows/release.yml", `
+name: Release
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag name'
+      message:
+        description: 'Release message'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tag release
+        run: git tag "${{ github.event.inputs.tag }}"
+      - name: Echo message
+        run: echo "${{ github.event.inputs.message }}"
+`)
+
+	engine := NewEngineWithDefaults()
+	findings := engine.Evaluate([]*parser.Workflow{wf})
+
+	var vxs014 []Finding
+	for _, f := range findings {
+		if f.RuleID == "VXS-014" {
+			vxs014 = append(vxs014, f)
+		}
+	}
+
+	assert.Len(t, vxs014, 2, "expected 2 VXS-014 findings for two dispatch inputs in separate steps")
+}
+
+func TestVXS014_SafeViaEnvVar(t *testing.T) {
+	wf := mustParseWorkflow(t, ".github/workflows/deploy-safe.yml", `
+name: Safe Deploy
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy version
+        run: echo "Deploying ${VERSION}"
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+`)
+
+	engine := NewEngineWithDefaults()
+	findings := engine.Evaluate([]*parser.Workflow{wf})
+
+	var vxs014 []Finding
+	for _, f := range findings {
+		if f.RuleID == "VXS-014" {
+			vxs014 = append(vxs014, f)
+		}
+	}
+
+	assert.Empty(t, vxs014, "should not flag VXS-014 when input is passed via env var")
+}
+
+func TestVXS014_SafeNoDispatchInput(t *testing.T) {
+	wf := mustParseWorkflow(t, ".github/workflows/ci.yml", `
+name: CI
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Building ${{ github.sha }}"
+`)
+
+	engine := NewEngineWithDefaults()
+	findings := engine.Evaluate([]*parser.Workflow{wf})
+
+	var vxs014 []Finding
+	for _, f := range findings {
+		if f.RuleID == "VXS-014" {
+			vxs014 = append(vxs014, f)
+		}
+	}
+
+	assert.Empty(t, vxs014, "should not flag VXS-014 for non-dispatch expressions")
+}
+
+// ---------------------------------------------------------------------------
+// VXS-015: Actions Runner Debug Logging Enabled
+// ---------------------------------------------------------------------------
+
+func TestVXS015_WorkflowLevelDebug(t *testing.T) {
+	wf := mustParseWorkflow(t, ".github/workflows/debug.yml", `
+name: Debug Workflow
+on: push
+
+env:
+  ACTIONS_RUNNER_DEBUG: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "hello"
+`)
+
+	engine := NewEngineWithDefaults()
+	findings := engine.Evaluate([]*parser.Workflow{wf})
+
+	var vxs015 []Finding
+	for _, f := range findings {
+		if f.RuleID == "VXS-015" {
+			vxs015 = append(vxs015, f)
+		}
+	}
+
+	assert.NotEmpty(t, vxs015, "expected VXS-015 for workflow-level ACTIONS_RUNNER_DEBUG")
+	assert.Contains(t, vxs015[0].Evidence, "ACTIONS_RUNNER_DEBUG")
+}
+
+func TestVXS015_JobLevelDebug(t *testing.T) {
+	wf := mustParseWorkflow(t, ".github/workflows/debug-job.yml", `
+name: Debug Job
+on: push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      ACTIONS_STEP_DEBUG: true
+    steps:
+      - run: echo "hello"
+`)
+
+	engine := NewEngineWithDefaults()
+	findings := engine.Evaluate([]*parser.Workflow{wf})
+
+	var vxs015 []Finding
+	for _, f := range findings {
+		if f.RuleID == "VXS-015" {
+			vxs015 = append(vxs015, f)
+		}
+	}
+
+	assert.NotEmpty(t, vxs015, "expected VXS-015 for job-level ACTIONS_STEP_DEBUG")
+}
+
+func TestVXS015_StepLevelDebug(t *testing.T) {
+	wf := mustParseWorkflow(t, ".github/workflows/debug-step.yml", `
+name: Debug Step
+on: push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "step 1"
+        env:
+          ACTIONS_RUNNER_DEBUG: true
+      - run: echo "step 2"
+        env:
+          ACTIONS_STEP_DEBUG: true
+`)
+
+	engine := NewEngineWithDefaults()
+	findings := engine.Evaluate([]*parser.Workflow{wf})
+
+	var vxs015 []Finding
+	for _, f := range findings {
+		if f.RuleID == "VXS-015" {
+			vxs015 = append(vxs015, f)
+		}
+	}
+
+	assert.Len(t, vxs015, 2, "expected 2 VXS-015 findings for debug vars in separate steps")
+}
+
+func TestVXS015_SafeNoDebugVars(t *testing.T) {
+	wf := mustParseWorkflow(t, ".github/workflows/safe.yml", `
+name: Safe
+on: push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: production
+    steps:
+      - run: echo "hello"
+`)
+
+	engine := NewEngineWithDefaults()
+	findings := engine.Evaluate([]*parser.Workflow{wf})
+
+	var vxs015 []Finding
+	for _, f := range findings {
+		if f.RuleID == "VXS-015" {
+			vxs015 = append(vxs015, f)
+		}
+	}
+
+	assert.Empty(t, vxs015, "should not flag VXS-015 when no debug vars present")
+}
+
+func TestVXS015_SafeDebugFalse(t *testing.T) {
+	wf := mustParseWorkflow(t, ".github/workflows/debug-false.yml", `
+name: Debug False
+on: push
+
+env:
+  ACTIONS_RUNNER_DEBUG: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "hello"
+`)
+
+	engine := NewEngineWithDefaults()
+	findings := engine.Evaluate([]*parser.Workflow{wf})
+
+	var vxs015 []Finding
+	for _, f := range findings {
+		if f.RuleID == "VXS-015" {
+			vxs015 = append(vxs015, f)
+		}
+	}
+
+	assert.Empty(t, vxs015, "should not flag VXS-015 when debug vars are set to false")
 }
 
 // ---------------------------------------------------------------------------

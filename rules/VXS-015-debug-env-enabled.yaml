@@ -1,0 +1,75 @@
+id: VXS-015
+name: "Actions Runner Debug Logging Enabled"
+severity: medium
+description: >
+  A GitHub Actions workflow has `ACTIONS_RUNNER_DEBUG` or `ACTIONS_STEP_DEBUG` set
+  to `true` in an environment variable block. When debug logging is enabled, the
+  runner outputs extensive diagnostic information including environment variables,
+  file paths, command arguments, and internal runner state. This information is
+  written to workflow logs, which are accessible to anyone with read access to the
+  repository. In public repositories, this means anyone on the internet can view
+  the debug output. Debug logging can inadvertently expose secrets that are masked
+  in normal output, internal infrastructure details, API endpoints, and other
+  sensitive operational data that aids reconnaissance or direct exploitation.
+
+tags:
+  - information-disclosure
+  - debug
+  - configuration
+
+attack_scenario: >
+  A developer enables `ACTIONS_RUNNER_DEBUG: true` in a workflow's env block during
+  troubleshooting and forgets to remove it. Every subsequent workflow run now
+  outputs verbose debug logs containing internal paths, environment variable names
+  and partial values, runner metadata, and step execution details. On a public
+  repository, an attacker monitors these logs to discover internal infrastructure
+  endpoints, API URL patterns, secret naming conventions, and runner configuration
+  details. This reconnaissance data is then used to craft targeted attacks against
+  the repository's CI/CD pipeline or connected infrastructure. In combination with
+  other vulnerabilities (such as expression injection), debug output can reveal
+  the exact secrets and tokens available to the runner.
+
+real_world_incident: >
+  Debug logging left enabled in production CI/CD pipelines has been a recurring
+  source of information leakage across the software industry. GitHub's own
+  documentation warns that debug logging "may contain secrets" and recommends
+  enabling it only temporarily via repository secrets rather than hardcoding it
+  in workflow files. The ACTIONS_RUNNER_DEBUG and ACTIONS_STEP_DEBUG variables
+  are specifically designed for temporary troubleshooting and should never be
+  committed to workflow files in an enabled state.
+
+fix: |
+  **Remove `ACTIONS_RUNNER_DEBUG` and `ACTIONS_STEP_DEBUG` from workflow env blocks.**
+  If debug logging is needed for troubleshooting, use repository-level secrets
+  that can be toggled without modifying workflow files.
+
+  **Vulnerable pattern:**
+
+  ```yaml
+  # DANGEROUS: Debug logging permanently enabled in workflow file
+  env:
+    ACTIONS_RUNNER_DEBUG: true
+    ACTIONS_STEP_DEBUG: true
+
+  jobs:
+    build:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
+        - run: npm test
+  ```
+
+  **Safe alternative for temporary debugging:**
+
+  ```yaml
+  # SAFE: Debug logging controlled via repository secret (not in workflow file)
+  # Set ACTIONS_RUNNER_DEBUG = true in repository Settings > Secrets when needed,
+  # then delete it when troubleshooting is complete.
+  ```
+
+  **Why this matters:** Hardcoding debug variables in workflow files means every
+  run produces debug output, creating a persistent information disclosure risk.
+  Using repository secrets instead allows debug logging to be enabled temporarily
+  and revoked without a code change.
+
+references: []
