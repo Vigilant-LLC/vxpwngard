@@ -147,8 +147,18 @@ func processFile(path string, dryRun bool) ([]PinResult, error) {
 
 		if !dryRun {
 			// Build the new line: preserve indentation, add SHA, comment with old ref.
-			newLine := fmt.Sprintf("%s%s@%s # %s", prefix, action, sha, ref)
-			lines[i] = newLine
+			trailing := line[matches[8]:matches[9]] // Group 4: trailing content
+			trailing = strings.TrimSpace(trailing)
+
+			// Preserve any existing trailing comment, appending it after our ref comment.
+			if strings.HasPrefix(trailing, "#") {
+				// Already has a comment — prepend our ref tag before the existing comment.
+				newLine := fmt.Sprintf("%s%s@%s # %s %s", prefix, action, sha, ref, trailing)
+				lines[i] = newLine
+			} else {
+				newLine := fmt.Sprintf("%s%s@%s # %s", prefix, action, sha, ref)
+				lines[i] = newLine
+			}
 			modified = true
 		}
 

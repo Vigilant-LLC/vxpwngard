@@ -450,14 +450,22 @@ func writeReport(w io.Writer, findings []rules.Finding, format string, noColor b
 
 func newFixCmd() *cobra.Command {
 	var dryRun bool
+	var ruleFilter string
 
 	cmd := &cobra.Command{
 		Use:   "fix [path]",
-		Short: "Auto-fix security issues (pins third-party actions to commit SHAs)",
-		Long: `Scans workflow files and automatically pins third-party GitHub Actions
-to their current commit SHA, preventing supply-chain attacks via tag mutation.
+		Short: "Auto-fix security issues in GitHub Actions workflows",
+		Long: `Scans workflow files and automatically remediates security findings.
 
-This fixes VXS-007 findings. Use --dry-run to preview changes without modifying files.`,
+Supported auto-fixes:
+  VXS-002  Extract untrusted expressions from run blocks into env vars
+  VXS-007  Pin third-party actions to commit SHAs
+  VXS-008  Extract secrets from run blocks into env vars
+  VXS-014  Extract workflow_dispatch inputs from run blocks into env vars
+  VXS-015  Remove ACTIONS_RUNNER_DEBUG / ACTIONS_STEP_DEBUG env vars
+
+Use --dry-run to preview changes without modifying files.
+Use --rule to apply a specific rule's fix (e.g. --rule VXS-007).`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir := "."
@@ -467,33 +475,52 @@ This fixes VXS-007 findings. Use --dry-run to preview changes without modifying 
 
 			printHeader(os.Stderr)
 
-			results, err := autofix.PinActions(dir, dryRun)
-			if err != nil {
-				return fmt.Errorf("fix failed: %w", err)
+			// Determine which fixes to run.
+			fixFuncs := make(map[string]autofix.FixFunc)
+			if ruleFilter != "" {
+				fn, ok := autofix.Registry[ruleFilter]
+				if !ok {
+					return fmt.Errorf("no auto-fix available for rule %s", ruleFilter)
+				}
+				fixFuncs[ruleFilter] = fn
+			} else {
+				for id, fn := range autofix.Registry {
+					fixFuncs[id] = fn
+				}
 			}
 
-			if len(results) == 0 {
+			var allResults []autofix.FixResult
+			for ruleID, fn := range fixFuncs {
+				results, err := fn(dir, dryRun)
+				if err != nil {
+					errColor := color.New(color.FgRed)
+					errColor.Fprintf(os.Stderr, "  Warning: %s fix failed: %v\n", ruleID, err)
+					continue
+				}
+				allResults = append(allResults, results...)
+			}
+
+			if len(allResults) == 0 {
 				boldGreen := color.New(color.FgGreen, color.Bold)
-				boldGreen.Fprintln(os.Stdout, "\u2713 All third-party actions are already pinned to commit SHAs.")
+				boldGreen.Fprintln(os.Stdout, "\u2713 No auto-fixable issues found.")
 				return nil
 			}
 
-			verb := "Pinned"
+			verb := "Fixed"
 			if dryRun {
-				verb = "Would pin"
+				verb = "Would fix"
 			}
 
 			var succeeded, failed int
-			for _, r := range results {
+			for _, r := range allResults {
 				if r.Error != "" {
 					failed++
 					errColor := color.New(color.FgRed)
-					errColor.Fprintf(os.Stdout, "  \u2717 %s@%s — %s\n", r.Action, r.OldRef, r.Error)
+					errColor.Fprintf(os.Stdout, "  \u2717 [%s] %s\n", r.RuleID, r.Error)
 				} else {
 					succeeded++
 					okColor := color.New(color.FgGreen)
-					okColor.Fprintf(os.Stdout, "  \u2713 %s %s@%s \u2192 %s\n",
-						verb, r.Action, r.OldRef, r.NewRef[:12]+"...")
+					okColor.Fprintf(os.Stdout, "  \u2713 [%s] %s\n", r.RuleID, r.Detail)
 					fileColor := color.New(color.FgBlue)
 					fileColor.Fprintf(os.Stdout, "    %s (line %d)\n", r.File, r.LineNum)
 				}
@@ -501,12 +528,12 @@ This fixes VXS-007 findings. Use --dry-run to preview changes without modifying 
 
 			fmt.Fprintln(os.Stdout)
 			if dryRun {
-				fmt.Fprintf(os.Stdout, "Dry run: %d actions would be pinned", succeeded)
+				fmt.Fprintf(os.Stdout, "Dry run: %d fixes would be applied", succeeded)
 			} else {
-				fmt.Fprintf(os.Stdout, "Fixed: %d actions pinned to commit SHAs", succeeded)
+				fmt.Fprintf(os.Stdout, "%s: %d issues remediated", verb, succeeded)
 			}
 			if failed > 0 {
-				fmt.Fprintf(os.Stdout, " (%d failed — set GITHUB_TOKEN for better API access)", failed)
+				fmt.Fprintf(os.Stdout, " (%d failed)", failed)
 			}
 			fmt.Fprintln(os.Stdout)
 
@@ -515,6 +542,7 @@ This fixes VXS-007 findings. Use --dry-run to preview changes without modifying 
 	}
 
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview changes without modifying files")
+	cmd.Flags().StringVar(&ruleFilter, "rule", "", "Apply fix for a specific rule only (e.g. VXS-007)")
 
 	return cmd
 }
