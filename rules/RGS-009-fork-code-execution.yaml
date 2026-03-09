@@ -1,11 +1,11 @@
-id: VXS-009
+id: RGS-009
 name: "Direct Execution of Fork Code in Privileged Context"
 severity: critical
 description: >
   A workflow uses the `pull_request_target` trigger and, after checking out fork code,
   directly executes it using language runtimes such as `go run`, `node`, `python`,
   `ruby`, `bash`, `perl`, `make`, `gradle`, `mvn`, `cargo run`, `dotnet run`, or
-  equivalent commands. This is distinct from VXS-001 (which covers the checkout itself)
+  equivalent commands. This is distinct from RGS-001 (which covers the checkout itself)
   because this rule specifically targets the execution of fork-authored code within the
   privileged `pull_request_target` context. The `pull_request_target` trigger provides
   the workflow with the base repository's GITHUB_TOKEN (with write permissions) and all

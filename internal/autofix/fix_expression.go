@@ -2,7 +2,7 @@ package autofix
 
 import "strings"
 
-// tier1Sources are the untrusted GitHub context values that VXS-002 targets.
+// tier1Sources are the untrusted GitHub context values that RGS-002 targets.
 var tier1Sources = []string{
 	"github.head_ref",
 	"github.ref_name",
@@ -21,7 +21,7 @@ var tier1Sources = []string{
 }
 
 // FixExpressionInjection extracts Tier-1 untrusted expressions from run: blocks
-// into env: variable mappings. Fixes VXS-002.
+// into env: variable mappings. Fixes RGS-002.
 func FixExpressionInjection(dir string, dryRun bool) ([]FixResult, error) {
 	matcher := func(expr string) bool {
 		lower := strings.ToLower(expr)
@@ -32,5 +32,5 @@ func FixExpressionInjection(dir string, dryRun bool) ([]FixResult, error) {
 		}
 		return false
 	}
-	return ExtractExpressionsToEnv(dir, matcher, "VXS-002", dryRun)
+	return ExtractExpressionsToEnv(dir, matcher, "RGS-002", dryRun)
 }

@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Vigilant-LLC/vxpwngard/internal/parser"
-	"github.com/Vigilant-LLC/vxpwngard/internal/taint"
+	"github.com/Vigilant-LLC/runner-guard/internal/parser"
+	"github.com/Vigilant-LLC/runner-guard/internal/taint"
 )
 
 // Finding represents a single security finding produced by the rule engine.
@@ -67,20 +67,20 @@ func NewEngineWithDefaults() *Engine {
 }
 
 func (e *Engine) registerCheckers() {
-	e.checkers["VXS-001"] = e.checkVXS001
-	e.checkers["VXS-002"] = e.checkVXS002
-	e.checkers["VXS-003"] = e.checkVXS003
-	e.checkers["VXS-004"] = e.checkVXS004
-	e.checkers["VXS-005"] = e.checkVXS005
-	e.checkers["VXS-006"] = e.checkVXS006
-	e.checkers["VXS-007"] = e.checkVXS007
-	e.checkers["VXS-008"] = e.checkVXS008
-	e.checkers["VXS-009"] = e.checkVXS009
-	e.checkers["VXS-010"] = e.checkVXS010
-	e.checkers["VXS-011"] = e.checkVXS011
-	e.checkers["VXS-012"] = e.checkVXS012
-	e.checkers["VXS-014"] = e.checkVXS014
-	e.checkers["VXS-015"] = e.checkVXS015
+	e.checkers["RGS-001"] = e.checkRGS001
+	e.checkers["RGS-002"] = e.checkRGS002
+	e.checkers["RGS-003"] = e.checkRGS003
+	e.checkers["RGS-004"] = e.checkRGS004
+	e.checkers["RGS-005"] = e.checkRGS005
+	e.checkers["RGS-006"] = e.checkRGS006
+	e.checkers["RGS-007"] = e.checkRGS007
+	e.checkers["RGS-008"] = e.checkRGS008
+	e.checkers["RGS-009"] = e.checkRGS009
+	e.checkers["RGS-010"] = e.checkRGS010
+	e.checkers["RGS-011"] = e.checkRGS011
+	e.checkers["RGS-012"] = e.checkRGS012
+	e.checkers["RGS-014"] = e.checkRGS014
+	e.checkers["RGS-015"] = e.checkRGS015
 }
 
 // Evaluate runs all registered checkers against all provided workflows,
@@ -325,20 +325,20 @@ func (e *Engine) makeFinding(ruleID string, wf *parser.Workflow, jobID string, s
 // works even without YAML rule files.
 func defaultRuleMetadata() map[string]*RuleMetadata {
 	return map[string]*RuleMetadata{
-		"VXS-001": {ID: "VXS-001", Name: "pull_request_target with Fork Code Checkout", Severity: "critical"},
-		"VXS-002": {ID: "VXS-002", Name: "Expression Injection via Untrusted Input", Severity: "high"},
-		"VXS-003": {ID: "VXS-003", Name: "Dynamic Command Construction from Step Outputs", Severity: "high"},
-		"VXS-004": {ID: "VXS-004", Name: "Privileged Trigger with Secrets and No Author Check", Severity: "high"},
-		"VXS-005": {ID: "VXS-005", Name: "Excessive Permissions on Untrusted Trigger", Severity: "medium"},
-		"VXS-006": {ID: "VXS-006", Name: "Dangerous Sink in Run Block", Severity: "high"},
-		"VXS-007": {ID: "VXS-007", Name: "Unpinned Third-Party Action", Severity: "medium"},
-		"VXS-008": {ID: "VXS-008", Name: "Secrets Exposure in Run Block", Severity: "medium"},
-		"VXS-009": {ID: "VXS-009", Name: "Fork Code Execution via Build Tools", Severity: "critical"},
-		"VXS-010": {ID: "VXS-010", Name: "AI Agent Config Poisoning via Fork PR", Severity: "high"},
-		"VXS-011": {ID: "VXS-011", Name: "MCP Config Injection via Fork Checkout", Severity: "high"},
-		"VXS-012": {ID: "VXS-012", Name: "External Network Access with Secrets Context", Severity: "medium"},
-		"VXS-014": {ID: "VXS-014", Name: "Expression Injection via workflow_dispatch Input", Severity: "high"},
-		"VXS-015": {ID: "VXS-015", Name: "Actions Runner Debug Logging Enabled", Severity: "medium"},
+		"RGS-001": {ID: "RGS-001", Name: "pull_request_target with Fork Code Checkout", Severity: "critical"},
+		"RGS-002": {ID: "RGS-002", Name: "Expression Injection via Untrusted Input", Severity: "high"},
+		"RGS-003": {ID: "RGS-003", Name: "Dynamic Command Construction from Step Outputs", Severity: "high"},
+		"RGS-004": {ID: "RGS-004", Name: "Privileged Trigger with Secrets and No Author Check", Severity: "high"},
+		"RGS-005": {ID: "RGS-005", Name: "Excessive Permissions on Untrusted Trigger", Severity: "medium"},
+		"RGS-006": {ID: "RGS-006", Name: "Dangerous Sink in Run Block", Severity: "high"},
+		"RGS-007": {ID: "RGS-007", Name: "Unpinned Third-Party Action", Severity: "medium"},
+		"RGS-008": {ID: "RGS-008", Name: "Secrets Exposure in Run Block", Severity: "medium"},
+		"RGS-009": {ID: "RGS-009", Name: "Fork Code Execution via Build Tools", Severity: "critical"},
+		"RGS-010": {ID: "RGS-010", Name: "AI Agent Config Poisoning via Fork PR", Severity: "high"},
+		"RGS-011": {ID: "RGS-011", Name: "MCP Config Injection via Fork Checkout", Severity: "high"},
+		"RGS-012": {ID: "RGS-012", Name: "External Network Access with Secrets Context", Severity: "medium"},
+		"RGS-014": {ID: "RGS-014", Name: "Expression Injection via workflow_dispatch Input", Severity: "high"},
+		"RGS-015": {ID: "RGS-015", Name: "Actions Runner Debug Logging Enabled", Severity: "medium"},
 	}
 }
 
@@ -394,10 +394,10 @@ var (
 )
 
 // ---------------------------------------------------------------------------
-// VXS-001: pull_request_target with Fork Code Checkout
+// RGS-001: pull_request_target with Fork Code Checkout
 // ---------------------------------------------------------------------------
 
-func (e *Engine) checkVXS001(wf *parser.Workflow) []Finding {
+func (e *Engine) checkRGS001(wf *parser.Workflow) []Finding {
 	if !hasTrigger(wf, "pull_request_target") {
 		return nil
 	}
@@ -422,7 +422,7 @@ func (e *Engine) checkVXS001(wf *parser.Workflow) []Finding {
 				lower := strings.ToLower(refVal)
 				for _, prRef := range prHeadRefs {
 					if strings.Contains(lower, strings.ToLower(prRef)) {
-						f := e.makeFinding("VXS-001", wf, jobID, step,
+						f := e.makeFinding("RGS-001", wf, jobID, step,
 							"actions/checkout with ref: "+refVal)
 						findings = append(findings, f)
 						break
@@ -436,7 +436,7 @@ func (e *Engine) checkVXS001(wf *parser.Workflow) []Finding {
 					lower := strings.ToLower(expr)
 					for _, prRef := range prHeadRefs {
 						if strings.Contains(lower, strings.ToLower(prRef)) {
-							f := e.makeFinding("VXS-001", wf, jobID, step,
+							f := e.makeFinding("RGS-001", wf, jobID, step,
 								"actions/checkout expression references PR head: "+expr)
 							findings = append(findings, f)
 							break
@@ -451,10 +451,10 @@ func (e *Engine) checkVXS001(wf *parser.Workflow) []Finding {
 }
 
 // ---------------------------------------------------------------------------
-// VXS-002: Expression Injection via Untrusted Input
+// RGS-002: Expression Injection via Untrusted Input
 // ---------------------------------------------------------------------------
 
-func (e *Engine) checkVXS002(wf *parser.Workflow) []Finding {
+func (e *Engine) checkRGS002(wf *parser.Workflow) []Finding {
 	var findings []Finding
 
 	for jobID, job := range wf.Jobs {
@@ -467,7 +467,7 @@ func (e *Engine) checkVXS002(wf *parser.Workflow) []Finding {
 			// (where they are safely assigned to variables).
 			for _, expr := range exprPattern.FindAllString(step.Run, -1) {
 				if taint.IsTainted(expr, taint.Tier1Sources) {
-					f := e.makeFinding("VXS-002", wf, jobID, step,
+					f := e.makeFinding("RGS-002", wf, jobID, step,
 						"Tainted expression in run block: "+expr)
 					findings = append(findings, f)
 				}
@@ -479,10 +479,10 @@ func (e *Engine) checkVXS002(wf *parser.Workflow) []Finding {
 }
 
 // ---------------------------------------------------------------------------
-// VXS-003: Dynamic Command Construction from Step Outputs
+// RGS-003: Dynamic Command Construction from Step Outputs
 // ---------------------------------------------------------------------------
 
-func (e *Engine) checkVXS003(wf *parser.Workflow) []Finding {
+func (e *Engine) checkRGS003(wf *parser.Workflow) []Finding {
 	var findings []Finding
 
 	for jobID, job := range wf.Jobs {
@@ -498,7 +498,7 @@ func (e *Engine) checkVXS003(wf *parser.Workflow) []Finding {
 
 			// Check for step output expressions
 			if stepOutputPattern.MatchString(step.Run) {
-				f := e.makeFinding("VXS-003", wf, jobID, step,
+				f := e.makeFinding("RGS-003", wf, jobID, step,
 					"Run block uses git diff/find/ls and references step outputs: "+
 						truncate(step.Run, 200))
 				findings = append(findings, f)
@@ -510,10 +510,10 @@ func (e *Engine) checkVXS003(wf *parser.Workflow) []Finding {
 }
 
 // ---------------------------------------------------------------------------
-// VXS-004: Privileged Trigger with Secrets and No Author Check
+// RGS-004: Privileged Trigger with Secrets and No Author Check
 // ---------------------------------------------------------------------------
 
-func (e *Engine) checkVXS004(wf *parser.Workflow) []Finding {
+func (e *Engine) checkRGS004(wf *parser.Workflow) []Finding {
 	privilegedTriggers := hasCommentTrigger(wf) ||
 		hasTrigger(wf, "workflow_run") ||
 		hasTrigger(wf, "issue_comment")
@@ -531,7 +531,7 @@ func (e *Engine) checkVXS004(wf *parser.Workflow) []Finding {
 
 		for _, step := range job.Steps {
 			if hasSecretsAccess(step, job) {
-				f := e.makeFinding("VXS-004", wf, jobID, step,
+				f := e.makeFinding("RGS-004", wf, jobID, step,
 					"Privileged trigger with secrets access and no author/actor check")
 				findings = append(findings, f)
 			}
@@ -542,10 +542,10 @@ func (e *Engine) checkVXS004(wf *parser.Workflow) []Finding {
 }
 
 // ---------------------------------------------------------------------------
-// VXS-005: Excessive Permissions on Untrusted Trigger
+// RGS-005: Excessive Permissions on Untrusted Trigger
 // ---------------------------------------------------------------------------
 
-func (e *Engine) checkVXS005(wf *parser.Workflow) []Finding {
+func (e *Engine) checkRGS005(wf *parser.Workflow) []Finding {
 	untrusted := hasTrigger(wf, "pull_request_target") || hasCommentTrigger(wf)
 	if !untrusted {
 		return nil
@@ -557,7 +557,7 @@ func (e *Engine) checkVXS005(wf *parser.Workflow) []Finding {
 		for _, scope := range sensitivePermissions {
 			perm, ok := job.Permissions[scope]
 			if ok && strings.EqualFold(perm, "write") {
-				f := e.makeFinding("VXS-005", wf, jobID, nil,
+				f := e.makeFinding("RGS-005", wf, jobID, nil,
 					"Permission '"+scope+": write' on untrusted trigger")
 				findings = append(findings, f)
 			}
@@ -568,10 +568,10 @@ func (e *Engine) checkVXS005(wf *parser.Workflow) []Finding {
 }
 
 // ---------------------------------------------------------------------------
-// VXS-006: Dangerous Sink in Run Block
+// RGS-006: Dangerous Sink in Run Block
 // ---------------------------------------------------------------------------
 
-func (e *Engine) checkVXS006(wf *parser.Workflow) []Finding {
+func (e *Engine) checkRGS006(wf *parser.Workflow) []Finding {
 	var findings []Finding
 
 	for jobID, job := range wf.Jobs {
@@ -585,7 +585,7 @@ func (e *Engine) checkVXS006(wf *parser.Workflow) []Finding {
 				// Only flag if there are also expressions in the run block
 				if len(step.Expressions) > 0 {
 					evidence := "Dangerous sink (" + desc + ") with expression injection: " + truncate(step.Run, 200)
-					f := e.makeFinding("VXS-006", wf, jobID, step, evidence)
+					f := e.makeFinding("RGS-006", wf, jobID, step, evidence)
 					findings = append(findings, f)
 				}
 			}
@@ -596,10 +596,10 @@ func (e *Engine) checkVXS006(wf *parser.Workflow) []Finding {
 }
 
 // ---------------------------------------------------------------------------
-// VXS-007: Unpinned Third-Party Action
+// RGS-007: Unpinned Third-Party Action
 // ---------------------------------------------------------------------------
 
-func (e *Engine) checkVXS007(wf *parser.Workflow) []Finding {
+func (e *Engine) checkRGS007(wf *parser.Workflow) []Finding {
 	var findings []Finding
 
 	for jobID, job := range wf.Jobs {
@@ -620,7 +620,7 @@ func (e *Engine) checkVXS007(wf *parser.Workflow) []Finding {
 			atIdx := strings.LastIndex(step.Uses, "@")
 			if atIdx == -1 {
 				// No ref at all — flag it
-				f := e.makeFinding("VXS-007", wf, jobID, step,
+				f := e.makeFinding("RGS-007", wf, jobID, step,
 					"Third-party action with no version pin: "+step.Uses)
 				findings = append(findings, f)
 				continue
@@ -628,7 +628,7 @@ func (e *Engine) checkVXS007(wf *parser.Workflow) []Finding {
 
 			ref := step.Uses[atIdx+1:]
 			if !shaPattern.MatchString(ref) {
-				f := e.makeFinding("VXS-007", wf, jobID, step,
+				f := e.makeFinding("RGS-007", wf, jobID, step,
 					"Third-party action pinned to mutable ref '"+ref+"': "+step.Uses)
 				findings = append(findings, f)
 			}
@@ -639,10 +639,10 @@ func (e *Engine) checkVXS007(wf *parser.Workflow) []Finding {
 }
 
 // ---------------------------------------------------------------------------
-// VXS-008: Secrets Exposure in Run Block
+// RGS-008: Secrets Exposure in Run Block
 // ---------------------------------------------------------------------------
 
-func (e *Engine) checkVXS008(wf *parser.Workflow) []Finding {
+func (e *Engine) checkRGS008(wf *parser.Workflow) []Finding {
 	var findings []Finding
 
 	for jobID, job := range wf.Jobs {
@@ -656,7 +656,7 @@ func (e *Engine) checkVXS008(wf *parser.Workflow) []Finding {
 			for _, expr := range exprPattern.FindAllString(step.Run, -1) {
 				lower := strings.ToLower(expr)
 				if strings.Contains(lower, "secrets.") || strings.Contains(lower, "github.token") {
-					f := e.makeFinding("VXS-008", wf, jobID, step,
+					f := e.makeFinding("RGS-008", wf, jobID, step,
 						"Secrets/token referenced in run block: "+expr)
 					findings = append(findings, f)
 				}
@@ -668,10 +668,10 @@ func (e *Engine) checkVXS008(wf *parser.Workflow) []Finding {
 }
 
 // ---------------------------------------------------------------------------
-// VXS-009: Fork Code Execution via Build Tools
+// RGS-009: Fork Code Execution via Build Tools
 // ---------------------------------------------------------------------------
 
-func (e *Engine) checkVXS009(wf *parser.Workflow) []Finding {
+func (e *Engine) checkRGS009(wf *parser.Workflow) []Finding {
 	if !hasTrigger(wf, "pull_request_target") {
 		return nil
 	}
@@ -696,7 +696,7 @@ func (e *Engine) checkVXS009(wf *parser.Workflow) []Finding {
 				}
 				evidence += " followed by build/exec command: " + truncate(step.Run, 200)
 
-				f := e.makeFinding("VXS-009", wf, jobID, step, evidence)
+				f := e.makeFinding("RGS-009", wf, jobID, step, evidence)
 				findings = append(findings, f)
 			}
 		}
@@ -706,10 +706,10 @@ func (e *Engine) checkVXS009(wf *parser.Workflow) []Finding {
 }
 
 // ---------------------------------------------------------------------------
-// VXS-010: AI Agent Config Poisoning via Fork PR
+// RGS-010: AI Agent Config Poisoning via Fork PR
 // ---------------------------------------------------------------------------
 
-func (e *Engine) checkVXS010(wf *parser.Workflow) []Finding {
+func (e *Engine) checkRGS010(wf *parser.Workflow) []Finding {
 	if !hasTrigger(wf, "pull_request_target") {
 		return nil
 	}
@@ -725,14 +725,14 @@ func (e *Engine) checkVXS010(wf *parser.Workflow) []Finding {
 		for _, step := range job.Steps {
 			// Check run blocks for AI config file references
 			if step.Run != "" && aiConfigPattern.MatchString(step.Run) {
-				f := e.makeFinding("VXS-010", wf, jobID, step,
+				f := e.makeFinding("RGS-010", wf, jobID, step,
 					"Fork checkout with AI config file reference in run block: "+truncate(step.Run, 200))
 				findings = append(findings, f)
 			}
 
 			// Check step names for AI config references
 			if step.Name != "" && aiConfigPattern.MatchString(step.Name) {
-				f := e.makeFinding("VXS-010", wf, jobID, step,
+				f := e.makeFinding("RGS-010", wf, jobID, step,
 					"Fork checkout with AI config reference in step name: "+step.Name)
 				findings = append(findings, f)
 			}
@@ -743,10 +743,10 @@ func (e *Engine) checkVXS010(wf *parser.Workflow) []Finding {
 }
 
 // ---------------------------------------------------------------------------
-// VXS-011: MCP Config Injection via Fork Checkout
+// RGS-011: MCP Config Injection via Fork Checkout
 // ---------------------------------------------------------------------------
 
-func (e *Engine) checkVXS011(wf *parser.Workflow) []Finding {
+func (e *Engine) checkRGS011(wf *parser.Workflow) []Finding {
 	forkCheckout, _ := checkoutsForkCode(wf)
 	if !forkCheckout {
 		return nil
@@ -758,7 +758,7 @@ func (e *Engine) checkVXS011(wf *parser.Workflow) []Finding {
 		for _, step := range job.Steps {
 			// Check run blocks for MCP config file references
 			if step.Run != "" && mcpConfigPattern.MatchString(step.Run) {
-				f := e.makeFinding("VXS-011", wf, jobID, step,
+				f := e.makeFinding("RGS-011", wf, jobID, step,
 					"Fork checkout with MCP config file reference: "+truncate(step.Run, 200))
 				findings = append(findings, f)
 			}
@@ -766,7 +766,7 @@ func (e *Engine) checkVXS011(wf *parser.Workflow) []Finding {
 			// Check checkout path for MCP config
 			if isCheckoutAction(step.Uses) {
 				if path, ok := step.With["path"]; ok && mcpConfigPattern.MatchString(path) {
-					f := e.makeFinding("VXS-011", wf, jobID, step,
+					f := e.makeFinding("RGS-011", wf, jobID, step,
 						"Fork checkout into path containing MCP config: "+path)
 					findings = append(findings, f)
 				}
@@ -778,10 +778,10 @@ func (e *Engine) checkVXS011(wf *parser.Workflow) []Finding {
 }
 
 // ---------------------------------------------------------------------------
-// VXS-012: External Network Access with Secrets Context
+// RGS-012: External Network Access with Secrets Context
 // ---------------------------------------------------------------------------
 
-func (e *Engine) checkVXS012(wf *parser.Workflow) []Finding {
+func (e *Engine) checkRGS012(wf *parser.Workflow) []Finding {
 	var findings []Finding
 
 	githubDomains := []string{
@@ -820,7 +820,7 @@ func (e *Engine) checkVXS012(wf *parser.Workflow) []Finding {
 					}
 				}
 				if !isGitHub {
-					f := e.makeFinding("VXS-012", wf, jobID, step,
+					f := e.makeFinding("RGS-012", wf, jobID, step,
 						"curl/wget to non-GitHub URL with secrets access: "+u)
 					findings = append(findings, f)
 				}
@@ -832,10 +832,10 @@ func (e *Engine) checkVXS012(wf *parser.Workflow) []Finding {
 }
 
 // ---------------------------------------------------------------------------
-// VXS-014: Expression Injection via workflow_dispatch Input
+// RGS-014: Expression Injection via workflow_dispatch Input
 // ---------------------------------------------------------------------------
 
-func (e *Engine) checkVXS014(wf *parser.Workflow) []Finding {
+func (e *Engine) checkRGS014(wf *parser.Workflow) []Finding {
 	var findings []Finding
 
 	for jobID, job := range wf.Jobs {
@@ -848,7 +848,7 @@ func (e *Engine) checkVXS014(wf *parser.Workflow) []Finding {
 			// not in env/with (where they are safely assigned to variables).
 			for _, expr := range exprPattern.FindAllString(step.Run, -1) {
 				if dispatchInputPattern.MatchString(expr) {
-					f := e.makeFinding("VXS-014", wf, jobID, step,
+					f := e.makeFinding("RGS-014", wf, jobID, step,
 						"workflow_dispatch input interpolated in run block: "+expr)
 					findings = append(findings, f)
 				}
@@ -860,10 +860,10 @@ func (e *Engine) checkVXS014(wf *parser.Workflow) []Finding {
 }
 
 // ---------------------------------------------------------------------------
-// VXS-015: Actions Runner Debug Logging Enabled
+// RGS-015: Actions Runner Debug Logging Enabled
 // ---------------------------------------------------------------------------
 
-func (e *Engine) checkVXS015(wf *parser.Workflow) []Finding {
+func (e *Engine) checkRGS015(wf *parser.Workflow) []Finding {
 	var findings []Finding
 
 	debugVars := []string{"ACTIONS_RUNNER_DEBUG", "ACTIONS_STEP_DEBUG"}
@@ -874,7 +874,7 @@ func (e *Engine) checkVXS015(wf *parser.Workflow) []Finding {
 			for _, dv := range debugVars {
 				if val, ok := envMap[dv]; ok {
 					if isTrue(val) {
-						f := e.makeFinding("VXS-015", wf, "", nil,
+						f := e.makeFinding("RGS-015", wf, "", nil,
 							"Debug variable "+dv+" enabled at workflow level")
 						findings = append(findings, f)
 					}
@@ -888,7 +888,7 @@ func (e *Engine) checkVXS015(wf *parser.Workflow) []Finding {
 		for _, dv := range debugVars {
 			if val, ok := job.Env[dv]; ok {
 				if strings.EqualFold(val, "true") {
-					f := e.makeFinding("VXS-015", wf, jobID, nil,
+					f := e.makeFinding("RGS-015", wf, jobID, nil,
 						"Debug variable "+dv+" enabled at job level")
 					findings = append(findings, f)
 				}
@@ -899,7 +899,7 @@ func (e *Engine) checkVXS015(wf *parser.Workflow) []Finding {
 			for _, dv := range debugVars {
 				if val, ok := step.Env[dv]; ok {
 					if strings.EqualFold(val, "true") {
-						f := e.makeFinding("VXS-015", wf, jobID, step,
+						f := e.makeFinding("RGS-015", wf, jobID, step,
 							"Debug variable "+dv+" enabled at step level")
 						findings = append(findings, f)
 					}

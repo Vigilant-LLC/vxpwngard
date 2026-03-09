@@ -1,11 +1,11 @@
 // Package github provides functionality for fetching and scanning GitHub Actions
 // workflow files from remote public repositories via the GitHub API. This enables
-// vxpwngard to scan repositories without cloning them locally.
+// runner-guard to scan repositories without cloning them locally.
 //
 // Usage:
 //
-//	vxpwngard scan github.com/owner/repo
-//	vxpwngard scan github.com/owner/repo@branch
+//	runner-guard scan github.com/owner/repo
+//	runner-guard scan github.com/owner/repo@branch
 package github
 
 import (
@@ -23,7 +23,7 @@ const (
 	githubAPIBase = "https://api.github.com"
 
 	// userAgent is sent with every API request.
-	userAgent = "VXPwngard/0.1.0"
+	userAgent = "RunnerGuard/0.1.0"
 
 	// httpTimeout is the total timeout for all HTTP operations during a
 	// FetchWorkflows call.

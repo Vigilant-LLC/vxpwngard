@@ -1,4 +1,4 @@
-id: VXS-011
+id: RGS-011
 name: "MCP Configuration Injection via Fork Checkout"
 severity: critical
 description: >

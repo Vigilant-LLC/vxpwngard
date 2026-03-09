@@ -1,4 +1,4 @@
-id: VXS-001
+id: RGS-001
 name: "pull_request_target with Fork Code Checkout"
 severity: critical
 description: >

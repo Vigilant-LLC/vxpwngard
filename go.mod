@@ -1,4 +1,4 @@
-module github.com/Vigilant-LLC/vxpwngard
+module github.com/Vigilant-LLC/runner-guard
 
 go 1.22
 

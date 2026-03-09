@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="Vigilant-LLC/vxpwngard"
-BINARY_NAME="vxpwngard"
+REPO="Vigilant-LLC/runner-guard"
+BINARY_NAME="runner-guard"
 INSTALL_DIR="/usr/local/bin"
 
 # Detect OS
@@ -101,9 +101,9 @@ main() {
     fi
 
     echo ""
-    echo "vxpwngard ${version} installed successfully."
+    echo "runner-guard ${version} installed successfully."
     echo ""
-    echo "Run: vxpwngard demo"
+    echo "Run: runner-guard demo"
 }
 
 main

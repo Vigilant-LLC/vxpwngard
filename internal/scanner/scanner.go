@@ -1,5 +1,5 @@
 // Package scanner orchestrates the parse -> rule evaluation -> reporting
-// pipeline for VXPwngard. It ties together the parser, rule engine, and
+// pipeline for Runner Guard. It ties together the parser, rule engine, and
 // reporter packages behind a single Run / RunOnBytes entry point.
 package scanner
 
@@ -12,9 +12,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Vigilant-LLC/vxpwngard/internal/config"
-	"github.com/Vigilant-LLC/vxpwngard/internal/parser"
-	"github.com/Vigilant-LLC/vxpwngard/internal/rules"
+	"github.com/Vigilant-LLC/runner-guard/internal/config"
+	"github.com/Vigilant-LLC/runner-guard/internal/parser"
+	"github.com/Vigilant-LLC/runner-guard/internal/rules"
 )
 
 // Config holds every tuneable knob for a single scan invocation.
@@ -303,7 +303,7 @@ func applyConfigSuppressions(findings []rules.Finding, cfg Config) []rules.Findi
 	return kept
 }
 
-// applyInlineSuppressions removes findings that have # vxpwngard:ignore
+// applyInlineSuppressions removes findings that have # runner-guard:ignore
 // directives in their source workflow files.
 func applyInlineSuppressions(findings []rules.Finding, workflows []*parser.Workflow, cfg Config) []rules.Finding {
 	// Build a map of file content for inline suppression extraction.

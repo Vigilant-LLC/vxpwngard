@@ -1,4 +1,4 @@
-id: VXS-004
+id: RGS-004
 name: "Comment-Triggered Workflow Without Author Authorization Check"
 severity: high
 description: >

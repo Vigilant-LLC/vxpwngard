@@ -1,4 +1,4 @@
-id: VXS-007
+id: RGS-007
 name: "Unpinned Third-Party Action Using Mutable Tag"
 severity: medium
 description: >

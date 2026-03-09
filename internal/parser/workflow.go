@@ -177,14 +177,14 @@ func ParseDirectory(dir string) ([]*Workflow, error) {
 	// Block scanning dangerous root-level directories.
 	if dangerousPaths[absDir] {
 		return nil, fmt.Errorf("refusing to scan %s -- this would recursively walk a system directory. "+
-			"Point vxpwngard at a specific repository or .github/workflows/ directory instead", absDir)
+			"Point runner-guard at a specific repository or .github/workflows/ directory instead", absDir)
 	}
 
 	// Warn if scanning a home directory (contains many non-workflow files).
 	home, _ := os.UserHomeDir()
 	if home != "" && absDir == home {
 		return nil, fmt.Errorf("refusing to scan home directory %s -- this would recursively walk all your files. "+
-			"Point vxpwngard at a specific repository or .github/workflows/ directory instead", absDir)
+			"Point runner-guard at a specific repository or .github/workflows/ directory instead", absDir)
 	}
 
 	// First try the standard GitHub Actions path.

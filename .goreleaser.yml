@@ -1,4 +1,4 @@
-project_name: vxpwngard
+project_name: runner-guard
 
 before:
   hooks:
@@ -7,8 +7,8 @@ before:
     - go test ./...
 
 builds:
-  - main: ./cmd/vxpwngard
-    binary: vxpwngard
+  - main: ./cmd/runner-guard
+    binary: runner-guard
     env:
       - CGO_ENABLED=0
     ldflags:
@@ -49,18 +49,18 @@ brews:
       owner: Vigilant-LLC
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    homepage: "https://github.com/Vigilant-LLC/vxpwngard"
+    homepage: "https://github.com/Vigilant-LLC/runner-guard"
     description: "CI/CD source-to-sink vulnerability scanner for GitHub Actions"
     license: "Apache-2.0"
     install: |
-      bin.install "vxpwngard"
+      bin.install "runner-guard"
     test: |
-      system "#{bin}/vxpwngard", "version"
+      system "#{bin}/runner-guard", "version"
 
 release:
   github:
     owner: Vigilant-LLC
-    name: vxpwngard
+    name: runner-guard
   draft: false
   prerelease: auto
   name_template: "v{{.Version}}"

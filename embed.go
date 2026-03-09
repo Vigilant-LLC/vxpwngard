@@ -1,4 +1,4 @@
-package vxpwngard
+package runnerguard
 
 import "embed"
 

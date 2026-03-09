@@ -6,15 +6,15 @@ type FixFunc func(dir string, dryRun bool) ([]FixResult, error)
 // Registry maps rule IDs to their auto-fix functions.
 // Only rules with auto-fix capability are included.
 var Registry = map[string]FixFunc{
-	"VXS-002": FixExpressionInjection,
-	"VXS-007": fixVXS007Pin,
-	"VXS-008": FixSecretsExposure,
-	"VXS-014": FixDispatchInputInjection,
-	"VXS-015": FixDebugEnvVars,
+	"RGS-002": FixExpressionInjection,
+	"RGS-007": fixRGS007Pin,
+	"RGS-008": FixSecretsExposure,
+	"RGS-014": FixDispatchInputInjection,
+	"RGS-015": FixDebugEnvVars,
 }
 
-// fixVXS007Pin wraps PinActions to conform to the FixFunc signature.
-func fixVXS007Pin(dir string, dryRun bool) ([]FixResult, error) {
+// fixRGS007Pin wraps PinActions to conform to the FixFunc signature.
+func fixRGS007Pin(dir string, dryRun bool) ([]FixResult, error) {
 	pinResults, err := PinActions(dir, dryRun)
 	if err != nil {
 		return nil, err
@@ -28,7 +28,7 @@ func fixVXS007Pin(dir string, dryRun bool) ([]FixResult, error) {
 		}
 		results = append(results, FixResult{
 			File:    r.File,
-			RuleID:  "VXS-007",
+			RuleID:  "RGS-007",
 			Detail:  detail,
 			LineNum: r.LineNum,
 			Error:   r.Error,

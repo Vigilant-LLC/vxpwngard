@@ -1,4 +1,4 @@
-id: VXS-005
+id: RGS-005
 name: "Excessive Permissions on Untrusted Trigger"
 severity: medium
 description: >

@@ -1,4 +1,4 @@
-id: VXS-002
+id: RGS-002
 name: "Expression Injection via Branch Name or Untrusted Input"
 severity: critical
 description: >

@@ -1,4 +1,4 @@
-id: VXS-010
+id: RGS-010
 name: "AI Configuration File Injection via Fork Checkout"
 severity: high
 description: >
@@ -119,7 +119,7 @@ fix: |
   **Step 4: Never load AI configs from fork checkouts in CI.**
 
   ```yaml
-  # If using pull_request_target (which you should avoid per VXS-001),
+  # If using pull_request_target (which you should avoid per RGS-001),
   # NEVER checkout fork code where AI configs could be present
   on:
     pull_request_target:

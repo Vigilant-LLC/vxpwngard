@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"io"
 
-	"github.com/Vigilant-LLC/vxpwngard/internal/rules"
+	"github.com/Vigilant-LLC/runner-guard/internal/rules"
 )
 
 // jsonReport is the top-level structure for JSON output.

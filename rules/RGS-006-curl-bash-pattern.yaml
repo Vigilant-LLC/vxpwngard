@@ -1,4 +1,4 @@
-id: VXS-006
+id: RGS-006
 name: "Curl-Pipe-Bash Remote Code Execution"
 severity: high
 description: >

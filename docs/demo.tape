@@ -11,7 +11,7 @@ Set TypingSpeed 50ms
 Env PS1 "$ "
 
 # Show the demo scan
-Type "vxpwngard demo"
+Type "runner-guard demo"
 Sleep 1s
 Enter
 Sleep 8s
@@ -20,7 +20,7 @@ Sleep 8s
 Sleep 3s
 
 # Now show scanning a clean repo
-Type "vxpwngard scan ."
+Type "runner-guard scan ."
 Sleep 1s
 Enter
 Sleep 4s

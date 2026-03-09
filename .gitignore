@@ -4,7 +4,7 @@
 *.dll
 *.so
 *.dylib
-/vxpwngard
+/runner-guard
 
 # Test binary
 *.test
@@ -38,7 +38,7 @@ bin/
 *.zip
 
 # Baseline (user-generated, not committed)
-.vxpwngard-baseline.json
+.runner-guard-baseline.json
 
 # Prompt files
 claudecode-prompt.md
@@ -46,3 +46,7 @@ claudecode-prompt.md
 # Scan research targets
 scan-targets.tsv
 scan-results/
+
+# Private campaign tooling
+docs/campaign-plan.md
+pipeline/

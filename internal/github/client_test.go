@@ -43,15 +43,15 @@ func TestParseRepoPath_WithBranch(t *testing.T) {
 }
 
 func TestParseRepoPath_HTTPSPrefix(t *testing.T) {
-	owner, repo, branch, err := ParseRepoPath("https://github.com/Vigilant-LLC/vxpwngard")
+	owner, repo, branch, err := ParseRepoPath("https://github.com/Vigilant-LLC/runner-guard")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if owner != "Vigilant-LLC" {
 		t.Errorf("owner = %q, want %q", owner, "Vigilant-LLC")
 	}
-	if repo != "vxpwngard" {
-		t.Errorf("repo = %q, want %q", repo, "vxpwngard")
+	if repo != "runner-guard" {
+		t.Errorf("repo = %q, want %q", repo, "runner-guard")
 	}
 	if branch != "" {
 		t.Errorf("branch = %q, want %q", branch, "")

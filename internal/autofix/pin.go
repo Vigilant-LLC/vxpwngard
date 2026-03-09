@@ -1,5 +1,5 @@
-// Package autofix provides automated remediation for VXPwngard findings.
-// Currently implements --auto-fix for VXS-007 (pinning third-party actions
+// Package autofix provides automated remediation for Runner Guard findings.
+// Currently implements --auto-fix for RGS-007 (pinning third-party actions
 // to commit SHAs).
 package autofix
 
@@ -305,7 +305,7 @@ func githubGet(url string) ([]byte, error) {
 		return nil, fmt.Errorf("creating request for %s: %w", url, err)
 	}
 
-	req.Header.Set("User-Agent", "VXPwngard/0.1.0")
+	req.Header.Set("User-Agent", "RunnerGuard/0.1.0")
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 
 	if token := os.Getenv("GITHUB_TOKEN"); token != "" {

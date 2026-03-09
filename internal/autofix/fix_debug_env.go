@@ -11,7 +11,7 @@ import (
 var debugVars = []string{"ACTIONS_RUNNER_DEBUG", "ACTIONS_STEP_DEBUG"}
 
 // FixDebugEnvVars removes ACTIONS_RUNNER_DEBUG and ACTIONS_STEP_DEBUG entries
-// (set to true) from env blocks in workflow files. Fixes VXS-015.
+// (set to true) from env blocks in workflow files. Fixes RGS-015.
 func FixDebugEnvVars(dir string, dryRun bool) ([]FixResult, error) {
 	workflowDir := filepath.Join(dir, ".github", "workflows")
 	info, err := os.Stat(workflowDir)
@@ -65,7 +65,7 @@ func processFileDebugRemoval(path string, dryRun bool) ([]FixResult, error) {
 			key := extractEnvKey(trimmed)
 			results = append(results, FixResult{
 				File:    path,
-				RuleID:  "VXS-015",
+				RuleID:  "RGS-015",
 				Detail:  "Removed " + key + " from env block",
 				LineNum: i + 1,
 			})

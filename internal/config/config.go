@@ -1,5 +1,5 @@
-// Package config implements .vxpwngard.yaml configuration file loading and
-// inline # vxpwngard:ignore suppression parsing for VXPwngard.
+// Package config implements .runner-guard.yaml configuration file loading and
+// inline # runner-guard:ignore suppression parsing for Runner Guard.
 package config
 
 import (
@@ -13,7 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config represents a .vxpwngard.yaml configuration file.
+// Config represents a .runner-guard.yaml configuration file.
 type Config struct {
 	FailOn      string   `yaml:"fail-on"`
 	Baseline    string   `yaml:"baseline"`
@@ -24,9 +24,9 @@ type Config struct {
 }
 
 // configFileNames lists the filenames we search for, in priority order.
-var configFileNames = []string{".vxpwngard.yaml", ".vxpwngard.yml"}
+var configFileNames = []string{".runner-guard.yaml", ".runner-guard.yml"}
 
-// Load searches for .vxpwngard.yaml (or .vxpwngard.yml) in the given
+// Load searches for .runner-guard.yaml (or .runner-guard.yml) in the given
 // directory and its parent directories (up to the git root or filesystem root).
 // Returns nil config (not error) if no config file is found.
 func Load(dir string) (*Config, error) {
@@ -103,7 +103,7 @@ func (c *Config) ShouldIgnoreFile(filePath string) bool {
 	return false
 }
 
-// InlineSuppression represents a # vxpwngard:ignore directive found in YAML.
+// InlineSuppression represents a # runner-guard:ignore directive found in YAML.
 type InlineSuppression struct {
 	File    string
 	Line    int
@@ -111,23 +111,23 @@ type InlineSuppression struct {
 	Reason  string   // optional: text after the rule IDs
 }
 
-// inlineIgnorePattern matches the # vxpwngard:ignore directive in comments.
+// inlineIgnorePattern matches the # runner-guard:ignore directive in comments.
 // It captures:
-//   - Group 1: everything after "vxpwngard:ignore" (rule IDs, reason, etc.)
-var inlineIgnorePattern = regexp.MustCompile(`#\s*vxpwngard:ignore\b(.*)`)
+//   - Group 1: everything after "runner-guard:ignore" (rule IDs, reason, etc.)
+var inlineIgnorePattern = regexp.MustCompile(`#\s*runner-guard:ignore\b(.*)`)
 
-// ruleIDPattern matches VXS-NNN style rule identifiers.
-var ruleIDPattern = regexp.MustCompile(`VXS-\d+`)
+// ruleIDPattern matches RGS-NNN style rule identifiers.
+var ruleIDPattern = regexp.MustCompile(`RGS-\d+`)
 
 // ExtractInlineSuppressions scans a YAML file's raw bytes for
-// # vxpwngard:ignore directives and returns all found suppressions.
+// # runner-guard:ignore directives and returns all found suppressions.
 //
 // Supported formats:
 //
-//	# vxpwngard:ignore
-//	# vxpwngard:ignore VXS-007
-//	# vxpwngard:ignore VXS-007,VXS-005
-//	# vxpwngard:ignore VXS-007 -- we vendor this action
+//	# runner-guard:ignore
+//	# runner-guard:ignore RGS-007
+//	# runner-guard:ignore RGS-007,RGS-005
+//	# runner-guard:ignore RGS-007 -- we vendor this action
 func ExtractInlineSuppressions(data []byte, filePath string) []InlineSuppression {
 	var suppressions []InlineSuppression
 

@@ -1,4 +1,4 @@
-# VXPwngard Demo Vulnerable Workflows
+# Runner Guard Demo Vulnerable Workflows
 
 > **WARNING:** These workflows are intentionally vulnerable for demonstration purposes.
 > Do NOT use these in production repositories.
@@ -20,12 +20,12 @@ patterns compound the risk.
 ### ai-config-attack.yml -- AI Config Injection (CLAUDE.md Attack)
 Demonstrates the novel attack vector where AI configuration files (CLAUDE.md,
 .mcp.json) are modified in a fork PR to hijack AI code review agents. This is
-a VXPwngard-exclusive detection not found in other CI/CD scanners.
+a Runner Guard-exclusive detection not found in other CI/CD scanners.
 
 ## Usage
 
 ```bash
-vxpwngard demo                          # Run all demo scenarios
-vxpwngard demo --scenario fork-checkout # Run specific scenario
-vxpwngard scan demo/vulnerable/         # Scan demo files directly
+runner-guard demo                          # Run all demo scenarios
+runner-guard demo --scenario fork-checkout # Run specific scenario
+runner-guard scan demo/vulnerable/         # Scan demo files directly
 ```

@@ -9,7 +9,7 @@ Set Framerate 30
 
 Env PS1 "$ "
 
-Type "vxpwngard scan ."
+Type "runner-guard scan ."
 Sleep 500ms
 Enter
 Sleep 3s

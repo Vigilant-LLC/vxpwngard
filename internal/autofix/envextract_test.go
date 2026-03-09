@@ -55,10 +55,10 @@ jobs:
         run: echo "${{ github.event.pull_request.title }}"
 `)
 
-	results, err := ExtractExpressionsToEnv(dir, tier1Matcher, "VXS-002", false)
+	results, err := ExtractExpressionsToEnv(dir, tier1Matcher, "RGS-002", false)
 	require.NoError(t, err)
 	assert.Len(t, results, 1)
-	assert.Equal(t, "VXS-002", results[0].RuleID)
+	assert.Equal(t, "RGS-002", results[0].RuleID)
 
 	content := readWorkflowFile(t, dir)
 	assert.Contains(t, content, "${PR_TITLE}")
@@ -80,7 +80,7 @@ jobs:
           echo "Title: ${{ github.event.pull_request.title }}"
 `)
 
-	results, err := ExtractExpressionsToEnv(dir, tier1Matcher, "VXS-002", false)
+	results, err := ExtractExpressionsToEnv(dir, tier1Matcher, "RGS-002", false)
 	require.NoError(t, err)
 	assert.Len(t, results, 2)
 
@@ -105,7 +105,7 @@ jobs:
           NODE_ENV: production
 `)
 
-	results, err := ExtractExpressionsToEnv(dir, tier1Matcher, "VXS-002", false)
+	results, err := ExtractExpressionsToEnv(dir, tier1Matcher, "RGS-002", false)
 	require.NoError(t, err)
 	assert.Len(t, results, 1)
 
@@ -127,7 +127,7 @@ jobs:
 `
 	dir := setupWorkflowFile(t, original)
 
-	results, err := ExtractExpressionsToEnv(dir, tier1Matcher, "VXS-002", true)
+	results, err := ExtractExpressionsToEnv(dir, tier1Matcher, "RGS-002", true)
 	require.NoError(t, err)
 	assert.Len(t, results, 1)
 
@@ -146,7 +146,7 @@ jobs:
       - run: echo "${{ github.sha }}"
 `)
 
-	results, err := ExtractExpressionsToEnv(dir, tier1Matcher, "VXS-002", false)
+	results, err := ExtractExpressionsToEnv(dir, tier1Matcher, "RGS-002", false)
 	require.NoError(t, err)
 	assert.Empty(t, results)
 }
@@ -169,7 +169,7 @@ jobs:
 		return strings.Contains(lower, "secrets.") || strings.Contains(lower, "github.token")
 	}
 
-	results, err := ExtractExpressionsToEnv(dir, secretsMatcher, "VXS-008", false)
+	results, err := ExtractExpressionsToEnv(dir, secretsMatcher, "RGS-008", false)
 	require.NoError(t, err)
 	assert.Len(t, results, 1)
 
@@ -197,7 +197,7 @@ jobs:
 		return strings.Contains(strings.ToLower(expr), "github.event.inputs.")
 	}
 
-	results, err := ExtractExpressionsToEnv(dir, inputMatcher, "VXS-014", false)
+	results, err := ExtractExpressionsToEnv(dir, inputMatcher, "RGS-014", false)
 	require.NoError(t, err)
 	assert.Len(t, results, 1)
 
@@ -222,7 +222,7 @@ jobs:
 `
 	dir := setupWorkflowFile(t, original)
 
-	results, err := ExtractExpressionsToEnv(dir, tier1Matcher, "VXS-002", false)
+	results, err := ExtractExpressionsToEnv(dir, tier1Matcher, "RGS-002", false)
 	require.NoError(t, err)
 	assert.Empty(t, results, "should not extract expressions inside single quotes")
 
@@ -243,7 +243,7 @@ jobs:
           echo "${{ github.head_ref }}"
 `)
 
-	results, err := ExtractExpressionsToEnv(dir, tier1Matcher, "VXS-002", false)
+	results, err := ExtractExpressionsToEnv(dir, tier1Matcher, "RGS-002", false)
 	require.NoError(t, err)
 	assert.Len(t, results, 1, "should only extract the double-quoted expression")
 
@@ -338,7 +338,7 @@ jobs:
           echo "${{ github.event.pull_request.title }}"
 `)
 
-	results, err := ExtractExpressionsToEnv(dir, tier1Matcher, "VXS-002", false)
+	results, err := ExtractExpressionsToEnv(dir, tier1Matcher, "RGS-002", false)
 	require.NoError(t, err)
 	assert.Len(t, results, 1)
 

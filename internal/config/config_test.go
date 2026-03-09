@@ -17,17 +17,17 @@ func TestLoad_FromDirectory(t *testing.T) {
 	dir := t.TempDir()
 
 	configContent := `fail-on: high
-baseline: .vxpwngard-baseline.json
+baseline: .runner-guard-baseline.json
 changed-only: true
 ignore-rules:
-  - VXS-007
-  - VXS-008
+  - RGS-007
+  - RGS-008
 ignore-files:
   - "experimental-*.yml"
 format: json
 `
 	require.NoError(t, os.WriteFile(
-		filepath.Join(dir, ".vxpwngard.yaml"),
+		filepath.Join(dir, ".runner-guard.yaml"),
 		[]byte(configContent),
 		0644,
 	))
@@ -37,9 +37,9 @@ format: json
 	require.NotNil(t, cfg)
 
 	assert.Equal(t, "high", cfg.FailOn)
-	assert.Equal(t, ".vxpwngard-baseline.json", cfg.Baseline)
+	assert.Equal(t, ".runner-guard-baseline.json", cfg.Baseline)
 	assert.True(t, cfg.ChangedOnly)
-	assert.Equal(t, []string{"VXS-007", "VXS-008"}, cfg.IgnoreRules)
+	assert.Equal(t, []string{"RGS-007", "RGS-008"}, cfg.IgnoreRules)
 	assert.Equal(t, []string{"experimental-*.yml"}, cfg.IgnoreFiles)
 	assert.Equal(t, "json", cfg.Format)
 }
@@ -54,7 +54,7 @@ func TestLoad_YMLExtension(t *testing.T) {
 	configContent := `fail-on: medium
 `
 	require.NoError(t, os.WriteFile(
-		filepath.Join(dir, ".vxpwngard.yml"),
+		filepath.Join(dir, ".runner-guard.yml"),
 		[]byte(configContent),
 		0644,
 	))
@@ -73,12 +73,12 @@ func TestLoad_PrefersYAMLOverYML(t *testing.T) {
 	dir := t.TempDir()
 
 	require.NoError(t, os.WriteFile(
-		filepath.Join(dir, ".vxpwngard.yaml"),
+		filepath.Join(dir, ".runner-guard.yaml"),
 		[]byte("fail-on: critical\n"),
 		0644,
 	))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(dir, ".vxpwngard.yml"),
+		filepath.Join(dir, ".runner-guard.yml"),
 		[]byte("fail-on: low\n"),
 		0644,
 	))
@@ -99,7 +99,7 @@ func TestLoad_WalksUpToParent(t *testing.T) {
 	require.NoError(t, os.MkdirAll(child, 0755))
 
 	require.NoError(t, os.WriteFile(
-		filepath.Join(parent, ".vxpwngard.yaml"),
+		filepath.Join(parent, ".runner-guard.yaml"),
 		[]byte("fail-on: high\n"),
 		0644,
 	))
@@ -121,7 +121,7 @@ func TestLoad_StopsAtGitRoot(t *testing.T) {
 
 	// Put config ABOVE the git root (should NOT be found).
 	grandparent := filepath.Dir(root)
-	configPath := filepath.Join(grandparent, ".vxpwngard.yaml")
+	configPath := filepath.Join(grandparent, ".runner-guard.yaml")
 	// Only write if we can (grandparent might be read-only in CI).
 	err := os.WriteFile(configPath, []byte("fail-on: low\n"), 0644)
 	if err != nil {
@@ -160,7 +160,7 @@ func TestLoad_InvalidYAML(t *testing.T) {
 	dir := t.TempDir()
 
 	require.NoError(t, os.WriteFile(
-		filepath.Join(dir, ".vxpwngard.yaml"),
+		filepath.Join(dir, ".runner-guard.yaml"),
 		[]byte("fail-on: [\ninvalid yaml"),
 		0644,
 	))
@@ -175,25 +175,25 @@ func TestLoad_InvalidYAML(t *testing.T) {
 
 func TestShouldIgnoreRule(t *testing.T) {
 	cfg := &Config{
-		IgnoreRules: []string{"VXS-007", "VXS-008"},
+		IgnoreRules: []string{"RGS-007", "RGS-008"},
 	}
 
-	assert.True(t, cfg.ShouldIgnoreRule("VXS-007"))
-	assert.True(t, cfg.ShouldIgnoreRule("VXS-008"))
-	assert.True(t, cfg.ShouldIgnoreRule("vxs-007"), "should be case-insensitive")
-	assert.False(t, cfg.ShouldIgnoreRule("VXS-001"))
-	assert.False(t, cfg.ShouldIgnoreRule("VXS-005"))
+	assert.True(t, cfg.ShouldIgnoreRule("RGS-007"))
+	assert.True(t, cfg.ShouldIgnoreRule("RGS-008"))
+	assert.True(t, cfg.ShouldIgnoreRule("rgs-007"), "should be case-insensitive")
+	assert.False(t, cfg.ShouldIgnoreRule("RGS-001"))
+	assert.False(t, cfg.ShouldIgnoreRule("RGS-005"))
 }
 
 func TestShouldIgnoreRule_NilConfig(t *testing.T) {
 	var cfg *Config
-	assert.False(t, cfg.ShouldIgnoreRule("VXS-007"),
+	assert.False(t, cfg.ShouldIgnoreRule("RGS-007"),
 		"nil config should not ignore any rules")
 }
 
 func TestShouldIgnoreRule_EmptyIgnoreList(t *testing.T) {
 	cfg := &Config{}
-	assert.False(t, cfg.ShouldIgnoreRule("VXS-007"))
+	assert.False(t, cfg.ShouldIgnoreRule("RGS-007"))
 }
 
 // ---------------------------------------------------------------------------
@@ -250,12 +250,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # vxpwngard:ignore
+      # runner-guard:ignore
       - uses: codecov/codecov-action@v3
-      - uses: docker/build-push-action@v5 # vxpwngard:ignore VXS-007
-      # vxpwngard:ignore VXS-007,VXS-005
+      - uses: docker/build-push-action@v5 # runner-guard:ignore RGS-007
+      # runner-guard:ignore RGS-007,RGS-005
       - uses: some/action@main
-      # vxpwngard:ignore VXS-007 -- we vendor this action
+      # runner-guard:ignore RGS-007 -- we vendor this action
       - uses: vendor/action@v2
 `)
 
@@ -271,17 +271,17 @@ jobs:
 
 	// 2. Single rule ID (inline with uses line).
 	assert.Equal(t, 9, suppressions[1].Line)
-	assert.Equal(t, []string{"VXS-007"}, suppressions[1].RuleIDs)
+	assert.Equal(t, []string{"RGS-007"}, suppressions[1].RuleIDs)
 	assert.Empty(t, suppressions[1].Reason)
 
 	// 3. Multiple rule IDs.
 	assert.Equal(t, 10, suppressions[2].Line)
-	assert.Equal(t, []string{"VXS-007", "VXS-005"}, suppressions[2].RuleIDs)
+	assert.Equal(t, []string{"RGS-007", "RGS-005"}, suppressions[2].RuleIDs)
 	assert.Empty(t, suppressions[2].Reason)
 
 	// 4. Rule ID with reason.
 	assert.Equal(t, 12, suppressions[3].Line)
-	assert.Equal(t, []string{"VXS-007"}, suppressions[3].RuleIDs)
+	assert.Equal(t, []string{"RGS-007"}, suppressions[3].RuleIDs)
 	assert.Equal(t, "we vendor this action", suppressions[3].Reason)
 }
 
@@ -311,33 +311,33 @@ func TestExtractInlineSuppressions_EmptyFile(t *testing.T) {
 
 func TestIsInlineSuppressed_ExactLine(t *testing.T) {
 	suppressions := []InlineSuppression{
-		{File: "ci.yml", Line: 10, RuleIDs: []string{"VXS-007"}},
+		{File: "ci.yml", Line: 10, RuleIDs: []string{"RGS-007"}},
 	}
 
 	// Exact line match.
-	assert.True(t, IsInlineSuppressed(suppressions, "VXS-007", "ci.yml", 10))
+	assert.True(t, IsInlineSuppressed(suppressions, "RGS-007", "ci.yml", 10))
 
 	// Different rule ID.
-	assert.False(t, IsInlineSuppressed(suppressions, "VXS-001", "ci.yml", 10))
+	assert.False(t, IsInlineSuppressed(suppressions, "RGS-001", "ci.yml", 10))
 
 	// Different file.
-	assert.False(t, IsInlineSuppressed(suppressions, "VXS-007", "deploy.yml", 10))
+	assert.False(t, IsInlineSuppressed(suppressions, "RGS-007", "deploy.yml", 10))
 
 	// Different line.
-	assert.False(t, IsInlineSuppressed(suppressions, "VXS-007", "ci.yml", 12))
+	assert.False(t, IsInlineSuppressed(suppressions, "RGS-007", "ci.yml", 12))
 }
 
 func TestIsInlineSuppressed_LineAbove(t *testing.T) {
 	// Comment on line 9 suppresses findings on line 10.
 	suppressions := []InlineSuppression{
-		{File: "ci.yml", Line: 9, RuleIDs: []string{"VXS-007"}},
+		{File: "ci.yml", Line: 9, RuleIDs: []string{"RGS-007"}},
 	}
 
-	assert.True(t, IsInlineSuppressed(suppressions, "VXS-007", "ci.yml", 10),
+	assert.True(t, IsInlineSuppressed(suppressions, "RGS-007", "ci.yml", 10),
 		"suppression on line above should apply")
-	assert.False(t, IsInlineSuppressed(suppressions, "VXS-007", "ci.yml", 11),
+	assert.False(t, IsInlineSuppressed(suppressions, "RGS-007", "ci.yml", 11),
 		"suppression should not apply two lines below")
-	assert.False(t, IsInlineSuppressed(suppressions, "VXS-007", "ci.yml", 8),
+	assert.False(t, IsInlineSuppressed(suppressions, "RGS-007", "ci.yml", 8),
 		"suppression should not apply to lines above the comment")
 }
 
@@ -347,33 +347,33 @@ func TestIsInlineSuppressed_WildcardSuppression(t *testing.T) {
 		{File: "ci.yml", Line: 10, RuleIDs: nil},
 	}
 
-	assert.True(t, IsInlineSuppressed(suppressions, "VXS-007", "ci.yml", 10))
-	assert.True(t, IsInlineSuppressed(suppressions, "VXS-001", "ci.yml", 10))
-	assert.True(t, IsInlineSuppressed(suppressions, "VXS-012", "ci.yml", 10))
+	assert.True(t, IsInlineSuppressed(suppressions, "RGS-007", "ci.yml", 10))
+	assert.True(t, IsInlineSuppressed(suppressions, "RGS-001", "ci.yml", 10))
+	assert.True(t, IsInlineSuppressed(suppressions, "RGS-012", "ci.yml", 10))
 }
 
 func TestIsInlineSuppressed_MultipleRuleIDs(t *testing.T) {
 	suppressions := []InlineSuppression{
-		{File: "ci.yml", Line: 10, RuleIDs: []string{"VXS-007", "VXS-005"}},
+		{File: "ci.yml", Line: 10, RuleIDs: []string{"RGS-007", "RGS-005"}},
 	}
 
-	assert.True(t, IsInlineSuppressed(suppressions, "VXS-007", "ci.yml", 10))
-	assert.True(t, IsInlineSuppressed(suppressions, "VXS-005", "ci.yml", 10))
-	assert.False(t, IsInlineSuppressed(suppressions, "VXS-001", "ci.yml", 10))
+	assert.True(t, IsInlineSuppressed(suppressions, "RGS-007", "ci.yml", 10))
+	assert.True(t, IsInlineSuppressed(suppressions, "RGS-005", "ci.yml", 10))
+	assert.False(t, IsInlineSuppressed(suppressions, "RGS-001", "ci.yml", 10))
 }
 
 func TestIsInlineSuppressed_CaseInsensitive(t *testing.T) {
 	suppressions := []InlineSuppression{
-		{File: "ci.yml", Line: 10, RuleIDs: []string{"VXS-007"}},
+		{File: "ci.yml", Line: 10, RuleIDs: []string{"RGS-007"}},
 	}
 
-	assert.True(t, IsInlineSuppressed(suppressions, "vxs-007", "ci.yml", 10),
+	assert.True(t, IsInlineSuppressed(suppressions, "rgs-007", "ci.yml", 10),
 		"rule ID matching should be case-insensitive")
 }
 
 func TestIsInlineSuppressed_EmptySuppressions(t *testing.T) {
-	assert.False(t, IsInlineSuppressed(nil, "VXS-007", "ci.yml", 10))
-	assert.False(t, IsInlineSuppressed([]InlineSuppression{}, "VXS-007", "ci.yml", 10))
+	assert.False(t, IsInlineSuppressed(nil, "RGS-007", "ci.yml", 10))
+	assert.False(t, IsInlineSuppressed([]InlineSuppression{}, "RGS-007", "ci.yml", 10))
 }
 
 // ---------------------------------------------------------------------------
@@ -385,12 +385,12 @@ func TestIntegration_LoadAndCheck(t *testing.T) {
 
 	configContent := `fail-on: high
 ignore-rules:
-  - VXS-007
+  - RGS-007
 ignore-files:
   - "experimental-*.yml"
 `
 	require.NoError(t, os.WriteFile(
-		filepath.Join(dir, ".vxpwngard.yaml"),
+		filepath.Join(dir, ".runner-guard.yaml"),
 		[]byte(configContent),
 		0644,
 	))
@@ -400,8 +400,8 @@ ignore-files:
 	require.NotNil(t, cfg)
 
 	// Check rule suppression.
-	assert.True(t, cfg.ShouldIgnoreRule("VXS-007"))
-	assert.False(t, cfg.ShouldIgnoreRule("VXS-001"))
+	assert.True(t, cfg.ShouldIgnoreRule("RGS-007"))
+	assert.False(t, cfg.ShouldIgnoreRule("RGS-001"))
 
 	// Check file suppression.
 	assert.True(t, cfg.ShouldIgnoreFile("experimental-feature.yml"))
@@ -416,7 +416,7 @@ func TestLoad_EmptyConfig(t *testing.T) {
 	dir := t.TempDir()
 
 	require.NoError(t, os.WriteFile(
-		filepath.Join(dir, ".vxpwngard.yaml"),
+		filepath.Join(dir, ".runner-guard.yaml"),
 		[]byte("{}\n"),
 		0644,
 	))

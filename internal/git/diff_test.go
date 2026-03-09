@@ -13,10 +13,10 @@ import (
 // IsGitRepo
 // ---------------------------------------------------------------------------
 
-func TestIsGitRepo_VxpwngardRepo(t *testing.T) {
-	// The vxpwngard project root is a git repository.
+func TestIsGitRepo_RunnerGuardRepo(t *testing.T) {
+	// The runner-guard project root is a git repository.
 	repoRoot := findRepoRoot(t)
-	assert.True(t, IsGitRepo(repoRoot), "vxpwngard repo root should be a git repo")
+	assert.True(t, IsGitRepo(repoRoot), "runner-guard repo root should be a git repo")
 }
 
 func TestIsGitRepo_TmpDir(t *testing.T) {

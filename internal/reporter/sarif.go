@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/Vigilant-LLC/vxpwngard/internal/rules"
+	"github.com/Vigilant-LLC/runner-guard/internal/rules"
 )
 
 // ---------- SARIF 2.1.0 types ----------
@@ -174,9 +174,9 @@ func ReportSARIF(w io.Writer, findings []rules.Finding) error {
 			{
 				Tool: sarifTool{
 					Driver: sarifDriver{
-						Name:           "vxpwngard",
+						Name:           "runner-guard",
 						Version:        "0.1.0",
-						InformationURI: "https://github.com/Vigilant-LLC/vxpwngard",
+						InformationURI: "https://github.com/Vigilant-LLC/runner-guard",
 						Rules:          sarifRules,
 					},
 				},

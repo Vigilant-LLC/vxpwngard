@@ -1,4 +1,4 @@
-id: VXS-014
+id: RGS-014
 name: "Expression Injection via workflow_dispatch Input"
 severity: high
 description: >
@@ -31,7 +31,7 @@ attack_scenario: >
 
 real_world_incident: >
   Expression injection via workflow_dispatch inputs follows the same vulnerability
-  class as branch-name and PR-title injection (VXS-002), which was identified
+  class as branch-name and PR-title injection (RGS-002), which was identified
   across hundreds of repositories by GitHub Security Lab in 2022-2023. While
   workflow_dispatch requires the attacker to have workflow trigger permissions,
   this is commonly available to all collaborators and, on public repositories,

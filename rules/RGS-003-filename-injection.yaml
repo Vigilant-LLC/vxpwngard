@@ -1,4 +1,4 @@
-id: VXS-003
+id: RGS-003
 name: "Filename Injection via Git Diff or File Listing"
 severity: high
 description: >

@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/Vigilant-LLC/vxpwngard/internal/parser"
+	"github.com/Vigilant-LLC/runner-guard/internal/parser"
 )
 
 // ---------------------------------------------------------------------------

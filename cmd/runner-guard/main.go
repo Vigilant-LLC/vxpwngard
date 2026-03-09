@@ -1,4 +1,4 @@
-// VXPwngard — CI/CD Pipeline Security Scanner
+// Runner Guard — CI/CD Pipeline Security Scanner
 // Copyright (c) Vigilant. All rights reserved.
 package main
 
@@ -15,14 +15,14 @@ import (
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
-	vxpwngard "github.com/Vigilant-LLC/vxpwngard"
-	"github.com/Vigilant-LLC/vxpwngard/internal/autofix"
-	"github.com/Vigilant-LLC/vxpwngard/internal/config"
-	"github.com/Vigilant-LLC/vxpwngard/internal/git"
-	ghclient "github.com/Vigilant-LLC/vxpwngard/internal/github"
-	"github.com/Vigilant-LLC/vxpwngard/internal/reporter"
-	"github.com/Vigilant-LLC/vxpwngard/internal/rules"
-	"github.com/Vigilant-LLC/vxpwngard/internal/scanner"
+	runnerguard "github.com/Vigilant-LLC/runner-guard"
+	"github.com/Vigilant-LLC/runner-guard/internal/autofix"
+	"github.com/Vigilant-LLC/runner-guard/internal/config"
+	"github.com/Vigilant-LLC/runner-guard/internal/git"
+	ghclient "github.com/Vigilant-LLC/runner-guard/internal/github"
+	"github.com/Vigilant-LLC/runner-guard/internal/reporter"
+	"github.com/Vigilant-LLC/runner-guard/internal/rules"
+	"github.com/Vigilant-LLC/runner-guard/internal/scanner"
 )
 
 // Build-time variables injected via ldflags:
@@ -106,9 +106,9 @@ func main() {
 
 func newRootCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "vxpwngard",
-		Short: "VXPwngard — CI/CD Pipeline Security Scanner",
-		Long: `VXPwngard detects source-to-sink injection vulnerabilities, excessive
+		Use:   "runner-guard",
+		Short: "Runner Guard — CI/CD Pipeline Security Scanner",
+		Long: `Runner Guard detects source-to-sink injection vulnerabilities, excessive
 permissions, unpinned actions, AI config poisoning, and other security
 anti-patterns in GitHub Actions workflows.
 
@@ -136,12 +136,12 @@ func newScanCmd() *cobra.Command {
 		Use:   "scan [path]",
 		Short: "Scan GitHub Actions workflows for security issues",
 		Long: `Scan recursively finds .yml/.yaml files under <path>/.github/workflows/
-and evaluates them against VXPwngard's built-in rule set.
+and evaluates them against Runner Guard's built-in rule set.
 
 Path can be:
-  - A local directory:     vxpwngard scan .
-  - A GitHub repository:   vxpwngard scan github.com/owner/repo
-  - With a branch:         vxpwngard scan github.com/owner/repo@main`,
+  - A local directory:     runner-guard scan .
+  - A GitHub repository:   runner-guard scan github.com/owner/repo
+  - With a branch:         runner-guard scan github.com/owner/repo@main`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			start := time.Now()
@@ -154,7 +154,7 @@ Path can be:
 
 			printHeader(os.Stderr)
 
-			// Load .vxpwngard.yaml config file.
+			// Load .runner-guard.yaml config file.
 			fileCfg := loadConfigFile(path)
 
 			// Merge config file settings with CLI flags (CLI flags take precedence).
@@ -177,7 +177,7 @@ Path can be:
 				ChangedOnly: effectiveChangedOnly,
 				NoColor:     noColor || !isTTY(),
 				Output:      output,
-				RulesFS:     vxpwngard.RulesFS,
+				RulesFS:     runnerguard.RulesFS,
 			}
 
 			// Apply config-based ignore rules/files.
@@ -268,7 +268,7 @@ func newDemoCmd() *cobra.Command {
 				printDemoBanner(sc)
 
 				// Load the demo workflow file from the embedded FS.
-				files, err := loadDemoFiles(vxpwngard.DemoFS, sc)
+				files, err := loadDemoFiles(runnerguard.DemoFS, sc)
 				if err != nil {
 					return err
 				}
@@ -282,7 +282,7 @@ func newDemoCmd() *cobra.Command {
 					NoColor:      noColor,
 					IsDemo:       true,
 					DemoContexts: demoContexts,
-					RulesFS:      vxpwngard.RulesFS,
+					RulesFS:      runnerguard.RulesFS,
 				}
 
 				result, err := scanner.RunOnBytes(cfg, files)
@@ -297,7 +297,7 @@ func newDemoCmd() *cobra.Command {
 
 			// Closing prompt.
 			boldCyan := color.New(color.FgCyan, color.Bold)
-			boldCyan.Fprintln(os.Stdout, "\u2192 Run vxpwngard scan . to check your own pipelines")
+			boldCyan.Fprintln(os.Stdout, "\u2192 Run runner-guard scan . to check your own pipelines")
 
 			return nil
 		},
@@ -317,7 +317,7 @@ func newBaselineCmd() *cobra.Command {
 		Use:   "baseline [path]",
 		Short: "Generate a baseline file from current findings",
 		Long: `Scans the given path and writes all current finding fingerprints to
-.vxpwngard-baseline.json. Future scans using --baseline will suppress
+.runner-guard-baseline.json. Future scans using --baseline will suppress
 these findings, letting you focus on new issues.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -327,7 +327,7 @@ these findings, letting you focus on new issues.`,
 				Path:    path,
 				Format:  "console",
 				FailOn:  "critical",
-				RulesFS: vxpwngard.RulesFS,
+				RulesFS: runnerguard.RulesFS,
 			}
 
 			fingerprints, count, err := scanner.GenerateBaselineFingerprints(cfg)
@@ -340,7 +340,7 @@ these findings, letting you focus on new issues.`,
 				return fmt.Errorf("encoding baseline: %w", err)
 			}
 
-			outputPath := ".vxpwngard-baseline.json"
+			outputPath := ".runner-guard-baseline.json"
 			if err := os.WriteFile(outputPath, data, 0644); err != nil {
 				return fmt.Errorf("writing baseline file: %w", err)
 			}
@@ -360,9 +360,9 @@ these findings, letting you focus on new issues.`,
 func newVersionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
-		Short: "Print VXPwngard version information",
+		Short: "Print Runner Guard version information",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Fprintf(os.Stdout, "vxpwngard version v%s (commit: %s, built: %s)\n", version, commit, date)
+			fmt.Fprintf(os.Stdout, "runner-guard version v%s (commit: %s, built: %s)\n", version, commit, date)
 		},
 	}
 }
@@ -373,7 +373,7 @@ func newVersionCmd() *cobra.Command {
 
 // printHeader prints the CLI banner to the given writer.
 func printHeader(w io.Writer) {
-	fmt.Fprintf(w, "VXPwngard v%s | Vigilant\n", version)
+	fmt.Fprintf(w, "Runner Guard v%s | Vigilant\n", version)
 	fmt.Fprintln(w, separator)
 }
 
@@ -419,9 +419,9 @@ func loadDemoFiles(demoFS fs.FS, sc demoScenario) (map[string][]byte, error) {
 func buildDemoContexts(sc demoScenario) map[string]string {
 	// All 12 rules could potentially fire on a demo file.
 	ruleIDs := []string{
-		"VXS-001", "VXS-002", "VXS-003", "VXS-004",
-		"VXS-005", "VXS-006", "VXS-007", "VXS-008",
-		"VXS-009", "VXS-010", "VXS-011", "VXS-012",
+		"RGS-001", "RGS-002", "RGS-003", "RGS-004",
+		"RGS-005", "RGS-006", "RGS-007", "RGS-008",
+		"RGS-009", "RGS-010", "RGS-011", "RGS-012",
 	}
 
 	contexts := make(map[string]string, len(ruleIDs))
@@ -458,14 +458,14 @@ func newFixCmd() *cobra.Command {
 		Long: `Scans workflow files and automatically remediates security findings.
 
 Supported auto-fixes:
-  VXS-002  Extract untrusted expressions from run blocks into env vars
-  VXS-007  Pin third-party actions to commit SHAs
-  VXS-008  Extract secrets from run blocks into env vars
-  VXS-014  Extract workflow_dispatch inputs from run blocks into env vars
-  VXS-015  Remove ACTIONS_RUNNER_DEBUG / ACTIONS_STEP_DEBUG env vars
+  RGS-002  Extract untrusted expressions from run blocks into env vars
+  RGS-007  Pin third-party actions to commit SHAs
+  RGS-008  Extract secrets from run blocks into env vars
+  RGS-014  Extract workflow_dispatch inputs from run blocks into env vars
+  RGS-015  Remove ACTIONS_RUNNER_DEBUG / ACTIONS_STEP_DEBUG env vars
 
 Use --dry-run to preview changes without modifying files.
-Use --rule to apply a specific rule's fix (e.g. --rule VXS-007).`,
+Use --rule to apply a specific rule's fix (e.g. --rule RGS-007).`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir := "."
@@ -542,7 +542,7 @@ Use --rule to apply a specific rule's fix (e.g. --rule VXS-007).`,
 	}
 
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview changes without modifying files")
-	cmd.Flags().StringVar(&ruleFilter, "rule", "", "Apply fix for a specific rule only (e.g. VXS-007)")
+	cmd.Flags().StringVar(&ruleFilter, "rule", "", "Apply fix for a specific rule only (e.g. RGS-007)")
 
 	return cmd
 }

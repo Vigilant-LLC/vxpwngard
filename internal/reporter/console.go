@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/Vigilant-LLC/vxpwngard/internal/rules"
+	"github.com/Vigilant-LLC/runner-guard/internal/rules"
 )
 
 // ReportConsole writes color-coded findings to the provided writer.
@@ -66,7 +66,7 @@ func ReportConsole(w io.Writer, findings []rules.Finding, noColor bool, duration
 	for _, f := range findings {
 		fmt.Fprintln(w, separator)
 
-		// Header line: [CRITICAL] VXS-001 — rule name
+		// Header line: [CRITICAL] RGS-001 — rule name
 		fmt.Fprintf(w, "[%s] %s \u2014 %s\n",
 			severityColor(f.Severity),
 			boldWhite(f.RuleID),
